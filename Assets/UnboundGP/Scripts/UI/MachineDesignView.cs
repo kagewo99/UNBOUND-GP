@@ -110,7 +110,7 @@ namespace UnboundGP.UI
             // ---- 警告 ----
             if (g300 > MachineStats.HumanSustainedGLimit)
             {
-                sb.AppendLine("<color=#ff6655><b>⚠ 警告:</b> 高速コーナーで人間の持続G限界を超えます。</color>");
+                sb.AppendLine("<color=#ff6655><b>【警告】</b> 高速コーナーで人間の持続G限界を超えます。</color>");
                 sb.AppendLine("<color=#ff6655>HUMAN GP ではブラックアウト (失神) の危険があります。</color>");
             }
             else
