@@ -1,0 +1,27 @@
+# Unity 標準 gitignore (プロトタイプ用に最小構成)
+/[Ll]ibrary/
+/[Tt]emp/
+/[Oo]bj/
+/[Bb]uild/
+/[Bb]uilds/
+/[Ll]ogs/
+/[Uu]ser[Ss]ettings/
+/[Mm]emoryCaptures/
+
+# IDE
+.idea/
+.vs/
+.vscode/
+*.csproj
+*.sln
+*.user
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Unity が自動生成するキャッシュ
+*.pidb.meta
+*.pdb.meta
+*.mdb.meta
+crashlytics-build.properties
