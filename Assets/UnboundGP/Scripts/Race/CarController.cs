@@ -4,18 +4,22 @@ using UnityEngine;
 namespace UnboundGP.Race
 {
     /// <summary>
-    /// アーケード寄りの簡易マシン物理。MachineStats の数値が体感に直結するよう、
-    /// 「旋回限界G → 許容ヨーレート」という1本の式に集約している。
+    /// VehicleModel(純粋物理)と Unity の Rigidbody をつなぐ薄い接着層。
     ///
-    /// - グリップ限界以内でしか曲がれない (限界超過の要求は単に曲がらない=アンダー)
-    /// - ダウンフォースは速度の2乗で効き、ファンカーは速度ゼロから効く
-    /// - 横Gを毎ステップ DriverCondition に報告し、人間ドライバーなら意識が削れる
+    /// 役割:
+    /// - 毎物理ステップ、Rigidbody の現在速度を内部標準座標系へ変換してモデルへ与え、
+    ///   モデルが計算した速度・ヨーレートを書き戻す(衝突で削れた速度も自然に取り込む)
+    /// - ドライバーの状態(失神・視野狭窄)で入力を歪め、横Gを DriverCondition へ報告する
+    /// - ダウンフォースで路面に押し付け、橋の起伏でも飛ばない
+    ///
+    /// 物理そのものは VehicleModel 側にあり、オフラインのラップシムと同一式で動く。
     /// </summary>
     [RequireComponent(typeof(Rigidbody))]
     public class CarController : MonoBehaviour
     {
         public MachineStats Stats { get; private set; }
         public DriverCondition Condition { get; private set; }
+        public VehicleModel Model { get; private set; } = new VehicleModel();
 
         /// <summary>カウントダウン中は false。RaceManager が制御する。</summary>
         public bool InputEnabled = false;
@@ -23,9 +27,8 @@ namespace UnboundGP.Race
         public float CurrentSpeedMs { get; private set; }
         public float CurrentSpeedKmh => CurrentSpeedMs * 3.6f;
         public float CurrentLateralG { get; private set; }
-
-        const float WheelBase = 3.4f;
-        const float MaxSteerAngleRad = 28f * Mathf.Deg2Rad;
+        /// <summary>車体スリップ角[deg]。HUD やエフェクト(タイヤスモーク)のフック用。</summary>
+        public float SlipAngleDeg { get; private set; }
 
         Rigidbody rb;
         IDriverInput input;
@@ -39,11 +42,13 @@ namespace UnboundGP.Race
 
             rb = GetComponent<Rigidbody>();
             rb.mass = stats.weightKg;
-            rb.drag = 0.05f;
-            rb.angularDrag = 4f;
+            rb.drag = 0f;          // 抵抗はモデル側で扱う
+            rb.angularDrag = 0.5f;
             rb.interpolation = RigidbodyInterpolation.Interpolate;
             rb.collisionDetectionMode = CollisionDetectionMode.ContinuousDynamic;
-            rb.centerOfMass = new Vector3(0f, -0.25f, 0f); // 低重心で横転を抑制
+            rb.centerOfMass = new Vector3(0f, -0.2f, 0f);
+            // ヨーと横転以外の余計な回転は抑える(プロトタイプの安定性優先)
+            rb.constraints = RigidbodyConstraints.FreezeRotationX | RigidbodyConstraints.FreezeRotationZ;
         }
 
         void FixedUpdate()
@@ -51,19 +56,32 @@ namespace UnboundGP.Race
             if (rb == null || input == null) return;
             float dt = Time.fixedDeltaTime;
 
-            grounded = Physics.Raycast(transform.position + Vector3.up * 0.4f, Vector3.down, 1.1f);
-            float speed = Vector3.Dot(rb.velocity, transform.forward);
-            CurrentSpeedMs = Mathf.Abs(speed);
+            grounded = Physics.Raycast(transform.position + Vector3.up * 0.5f, Vector3.down, 1.2f);
 
-            // ---- ドライバーの状態が入力を歪める (Human GP の核心) ----
+            // ---- Rigidbody → モデル状態へ取り込み(衝突結果を反映) ----
+            // 平面の前方・右方向(車体の傾きを無視して水平面で扱う)
+            Vector3 fwd = Flatten(transform.forward);
+            Vector3 right = Flatten(transform.right);
+            Vector3 vel = rb.velocity;
+            float vyWorld = vel.y;
+
+            float u = Vector3.Dot(vel, fwd);                 // 前方
+            float rightComp = Vector3.Dot(vel, right);       // 右成分
+            Model.forwardSpeed = u;
+            Model.lateralSpeed = -rightComp;                 // 内部は左が正
+            Model.yawRate = -rb.angularVelocity.y;           // 内部は反時計回りが正
+
+            CurrentSpeedMs = Mathf.Abs(u);
+
+            // ---- ドライバーの状態が入力を歪める(Human GP の核心) ----
             float control = Condition != null ? Condition.ControlFactor : 1f;
             float throttle = InputEnabled ? Mathf.Clamp01(input.Throttle) * control : 0f;
             float brake = InputEnabled ? Mathf.Clamp01(input.Brake) : 1f;
-            float steer = InputEnabled ? Mathf.Clamp(input.Steer, -1f, 1f) * Mathf.Lerp(0.2f, 1f, control) : 0f;
+            float steer = InputEnabled ? Mathf.Clamp(input.Steer, -1f, 1f) * Mathf.Lerp(0.25f, 1f, control) : 0f;
 
             if (Condition != null && Condition.IsBlackedOut)
             {
-                // 失神中: アクセルから足が落ち、ステアリングは固まる。マシンは慣性のまま壁へ向かう。
+                // 失神中:アクセルから足が落ち、ステアは固まる。マシンは慣性のまま壁へ向かう。
                 throttle = 0f;
                 brake = 0.15f;
                 steer = 0f;
@@ -71,55 +89,43 @@ namespace UnboundGP.Race
 
             if (grounded)
             {
-                // ---- 駆動 ----
-                float topMs = Stats.EffectiveTopSpeedMs;
-                if (speed < topMs)
-                {
-                    float falloff = 1f - Mathf.Pow(Mathf.Clamp01(speed / topMs), 3f);
-                    rb.AddForce(transform.forward * (Stats.weightKg * Stats.acceleration * throttle * falloff));
-                }
+                // ---- 物理1ステップ ----
+                var outp = Model.Step(dt, throttle, brake, steer, Stats);
 
-                // ---- 制動 ----
-                if (brake > 0.01f && speed > 0.5f)
-                {
-                    rb.AddForce(-transform.forward * (Stats.weightKg * Stats.BrakeDecel(speed) * brake));
-                }
+                // ---- モデル状態 → Rigidbody へ書き戻し ----
+                Vector3 planar = fwd * Model.forwardSpeed + right * (-Model.lateralSpeed);
+                rb.velocity = new Vector3(planar.x, vyWorld, planar.z);
+                rb.angularVelocity = new Vector3(0f, -Model.yawRate, 0f);
 
-                // ---- 旋回: グリップ限界がヨーレートの上限を決める ----
-                float absSpeed = Mathf.Max(CurrentSpeedMs, 0.1f);
-                float maxLatAccel = Stats.MaxCorneringG(absSpeed) * 9.81f;
-                float gripYaw = maxLatAccel / Mathf.Max(absSpeed, 6f);
-                // 操舵角による幾何的上限: yaw = v / R, R = ホイールベース / tan(舵角)
-                float geomYaw = absSpeed * Mathf.Tan(MaxSteerAngleRad) / WheelBase;
-                float yawRate = steer * Mathf.Min(gripYaw, geomYaw);
-
-                rb.MoveRotation(rb.rotation * Quaternion.Euler(0f, yawRate * Mathf.Rad2Deg * dt, 0f));
-                CurrentLateralG = Mathf.Abs(speed * yawRate) / 9.81f;
-
-                // ---- 横滑りの収束 (タイヤが横方向の速度を食う) ----
-                Vector3 forwardVel = transform.forward * speed;
-                Vector3 verticalVel = Vector3.up * rb.velocity.y;
-                Vector3 lateralVel = rb.velocity - forwardVel - verticalVel;
-                rb.velocity = forwardVel + verticalVel + lateralVel * Mathf.Clamp01(1f - 6f * dt);
-
-                // ---- ダウンフォースで路面に押し付ける (橋の登りでも飛ばない) ----
-                float r = absSpeed / MachineStats.ReferenceSpeedMs;
-                float stickG = Stats.downforceFactor * r * r * 0.6f;
+                // ---- ダウンフォースで接地(橋の登りでも飛ばない) ----
+                float rr = CurrentSpeedMs / MachineStats.ReferenceSpeedMs;
+                float stickG = Stats.downforceFactor * rr * rr * 0.6f;
                 rb.AddForce(Vector3.down * (Stats.weightKg * 9.81f * stickG));
+
+                CurrentLateralG = outp.lateralG;
+                SlipAngleDeg = outp.slipAngleRad * Mathf.Rad2Deg;
             }
             else
             {
+                // 空中:操舵を切り、物理に任せて自然落下させる
                 CurrentLateralG = 0f;
             }
 
             Condition?.ReportG(CurrentLateralG, dt);
         }
 
-        /// <summary>コース上の指定位置へ復帰させる (スタック/失神事故からのリカバリ)。</summary>
+        static Vector3 Flatten(Vector3 v)
+        {
+            v.y = 0f;
+            return v.sqrMagnitude > 1e-6f ? v.normalized : Vector3.forward;
+        }
+
+        /// <summary>コース上の指定位置へ復帰させる(スタック/失神事故からのリカバリ)。</summary>
         public void ResetTo(Vector3 position, Quaternion rotation)
         {
             rb.velocity = Vector3.zero;
             rb.angularVelocity = Vector3.zero;
+            Model.Reset();
             transform.SetPositionAndRotation(position + Vector3.up * 0.6f, rotation);
         }
     }
