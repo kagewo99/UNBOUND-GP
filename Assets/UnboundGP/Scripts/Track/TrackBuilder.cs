@@ -19,7 +19,7 @@ namespace UnboundGP.Track
 
             BuildGround(root.transform);
             BuildRoad(root.transform, path, data.roadWidth);
-            BuildWalls(root.transform, path, data.roadWidth * 0.5f + 3f);
+            BuildWalls(root.transform, path, data.roadWidth * 0.5f + 0.8f);
             BuildStartLine(root.transform, path, data.roadWidth);
 
             return path;
@@ -74,8 +74,11 @@ namespace UnboundGP.Track
         // ----------------------------------------------------------------
         static void BuildWalls(Transform parent, TrackPath path, float offset)
         {
-            const float wallHeight = 1.4f;
-            const int step = 4; // サンプル4つごとに1セグメント
+            // 背を高く(3m)、路面より 0.8m 下から立ち上げる。
+            // こうすると立体交差の標高変化部でも壁と路面の間に隙間ができず、車が下へ抜けない。
+            const float wallHeight = 3.0f;
+            const float rootBelow = 0.8f;     // 路面下へ食い込ませる量
+            const int step = 2;               // サンプル2つごと=密に置いて隙間を防ぐ
 
             var wallRoot = new GameObject("Walls");
             wallRoot.transform.SetParent(parent, false);
@@ -88,14 +91,13 @@ namespace UnboundGP.Track
                 for (int i = 0; i < n; i += step)
                 {
                     int next = (i + step) % n;
-                    Vector3 fwdA = path.Forwards[i];
-                    Vector3 rightA = Vector3.Cross(Vector3.up, fwdA).normalized;
-                    Vector3 fwdB = path.Forwards[next];
-                    Vector3 rightB = Vector3.Cross(Vector3.up, fwdB).normalized;
+                    Vector3 rightA = Vector3.Cross(Vector3.up, path.Forwards[i]).normalized;
+                    Vector3 rightB = Vector3.Cross(Vector3.up, path.Forwards[next]).normalized;
 
                     Vector3 a = path.Points[i] + rightA * (offset * side);
                     Vector3 b = path.Points[next] + rightB * (offset * side);
-                    Vector3 center = (a + b) * 0.5f + Vector3.up * (wallHeight * 0.5f);
+                    // 中心を持ち上げる量 = 高さ/2 − 食い込み。底が路面より rootBelow だけ下になる。
+                    Vector3 center = (a + b) * 0.5f + Vector3.up * (wallHeight * 0.5f - rootBelow);
                     Vector3 dir = b - a;
                     if (dir.sqrMagnitude < 1e-4f) continue;
 
@@ -103,8 +105,8 @@ namespace UnboundGP.Track
                     seg.name = "WallSeg";
                     seg.transform.SetParent(wallRoot.transform, false);
                     seg.transform.SetPositionAndRotation(center, Quaternion.LookRotation(dir));
-                    seg.transform.localScale = new Vector3(0.5f, wallHeight, dir.magnitude + 0.6f);
-                    // 赤白の縞でサーキット感を出す
+                    // 厚さ0.8m、長さは隣接セグメントと重なるよう余分に伸ばす(隙間防止)
+                    seg.transform.localScale = new Vector3(0.8f, wallHeight, dir.magnitude + 1.2f);
                     seg.GetComponent<MeshRenderer>().sharedMaterial = (i / step) % 2 == 0 ? mat : matW;
                 }
             }

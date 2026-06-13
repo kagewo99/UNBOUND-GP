@@ -36,6 +36,23 @@ namespace UnboundGP.EditorTools
                 "OK");
         }
 
+        /// <summary>
+        /// データアセットを最新の既定値で作り直す(上書き)。
+        /// DefaultDataFactory 側でバランス調整した後、これを実行すると生成済みアセットへ反映される。
+        /// シーンには触れない。
+        /// </summary>
+        [MenuItem("UNBOUND GP/Regenerate Data Assets (overwrite)")]
+        public static void RegenerateData()
+        {
+            if (AssetDatabase.IsValidFolder(DataDir))
+                AssetDatabase.DeleteAsset(DataDir);   // 既存のデータフォルダごと削除
+            CreateDataAssets();
+            AssetDatabase.Refresh();
+            EditorUtility.DisplayDialog("UNBOUND GP",
+                "データアセットを再生成しました(最新のバランスを反映)。\nそのまま再生してください。",
+                "OK");
+        }
+
         // ----------------------------------------------------------------
         // データアセット
         // ----------------------------------------------------------------

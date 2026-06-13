@@ -28,10 +28,16 @@ namespace UnboundGP.Race
         public const float CogToFront = 1.85f;   // lf (前寄りに置くと後輪荷重が増える=トラクション寄り)
         public const float CogToRear = 1.55f;    // lr
         public const float CogHeight = 0.30f;    // h 低重心
-        public const float MaxSteerDeg = 30f;
-        public const float TireB = 11f;          // タイヤカーブの初期勾配
-        public const float TireC = 1.35f;        // 形状(>1で限界後にわずかに垂れる=スナップ)
+        public const float MaxSteerDeg = 26f;
+        public const float TireB = 18f;          // タイヤカーブの初期勾配(高いほど小さな滑りで食う=ダルつかない)
+        public const float TireC = 1.15f;        // 形状(1付近で限界が穏やか=スナップしにくく御しやすい)
         const float G = 9.81f;
+
+        // アーケード安定化:キーボード(舵が実質ON/OFF)でも破綻しないよう、
+        // 横滑りとヨーの暴れを毎ステップ穏やかに減衰させる。限界域の挙動は残しつつ、
+        // 「とんでもなく横に流れ続ける」のを防いで“狙った所へ行く”手応えにする。
+        public const float GripAssist = 3.0f;    // 横速度の追加減衰 [1/s]
+        public const float YawDamp = 1.2f;       // ヨーレートの追加減衰 [1/s]
 
         // ---- 状態(内部標準座標系) ----
         public float forwardSpeed;   // u  [m/s] 前方
@@ -141,6 +147,12 @@ namespace UnboundGP.Race
                 float blend = 1f - Mathf.Clamp01(absU / 6f);
                 r = Mathf.Lerp(r, kinR, blend);
                 v = Mathf.Lerp(v, 0f, blend * 0.5f);
+            }
+            else
+            {
+                // ---- アーケード安定化(走行中のみ) ----
+                v *= Mathf.Max(0f, 1f - GripAssist * dt);
+                r *= Mathf.Max(0f, 1f - YawDamp * dt);
             }
 
             lastLongAccel = Fx / m;

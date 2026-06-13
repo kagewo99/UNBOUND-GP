@@ -26,8 +26,8 @@ namespace UnboundGP.Data
             {
                 topSpeedKmh = 330f,
                 acceleration = 13f,
-                mechanicalGrip = 1.9f,
-                downforceFactor = 2.0f, // 300km/h時 約3.9G = 現代F1相当
+                mechanicalGrip = 2.5f,  // 低中速でも接地する素のグリップ(キーボードでの御しやすさ重視)
+                downforceFactor = 2.0f, // 300km/h時 約4.5G(素の機械グリップ込み)
                 drag = 0f,
                 weightKg = 798f,
                 reliability = 0.95f,
