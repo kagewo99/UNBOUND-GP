@@ -27,12 +27,17 @@ namespace UnboundGP.Race
         public float CurrentSpeedMs { get; private set; }
         public float CurrentSpeedKmh => CurrentSpeedMs * 3.6f;
         public float CurrentLateralG { get; private set; }
+        /// <summary>横G(符号付き, 右方向が正)。一人称カメラの頭振り演出に使う。</summary>
+        public float LateralGSigned { get; private set; }
+        /// <summary>縦G(符号付き, 加速が正・制動が負)。一人称カメラのピッチ演出に使う。</summary>
+        public float LongitudinalGSigned { get; private set; }
         /// <summary>車体スリップ角[deg]。HUD やエフェクト(タイヤスモーク)のフック用。</summary>
         public float SlipAngleDeg { get; private set; }
 
         Rigidbody rb;
         IDriverInput input;
         bool grounded;
+        float prevSpeedMs;
 
         public void Setup(MachineStats stats, IDriverInput driverInput, DriverCondition condition)
         {
@@ -103,13 +108,20 @@ namespace UnboundGP.Race
                 rb.AddForce(Vector3.down * (Stats.weightKg * 9.81f * stickG));
 
                 CurrentLateralG = outp.lateralG;
+                // 内部は左が正。カメラ用に「右方向が正」へ反転。
+                LateralGSigned = -outp.lateralAccel / 9.81f;
                 SlipAngleDeg = outp.slipAngleRad * Mathf.Rad2Deg;
             }
             else
             {
                 // 空中:操舵を切り、物理に任せて自然落下させる
                 CurrentLateralG = 0f;
+                LateralGSigned = 0f;
             }
+
+            // 縦G(速度の時間変化)。一人称カメラのピッチに使う。
+            LongitudinalGSigned = (CurrentSpeedMs - prevSpeedMs) / Mathf.Max(dt, 1e-4f) / 9.81f;
+            prevSpeedMs = CurrentSpeedMs;
 
             Condition?.ReportG(CurrentLateralG, dt);
         }

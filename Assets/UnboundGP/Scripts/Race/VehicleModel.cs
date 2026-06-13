@@ -45,6 +45,7 @@ namespace UnboundGP.Race
         {
             public float speed;          // 対地速度の大きさ [m/s]
             public float lateralG;       // 横G(絶対値)
+            public float lateralAccel;   // 横加速度(符号付き, 左が正)[m/s^2] 一人称の頭振り用
             public float slipAngleRad;   // 車体スリップ角(挙動の乱れ表示用)
             public float rearGripUsage;  // リアの縦グリップ使用率 0..1(オーバーステア予兆)
         }
@@ -152,6 +153,7 @@ namespace UnboundGP.Race
             {
                 speed = Mathf.Sqrt(u * u + v * v),
                 lateralG = Mathf.Abs(lateralAccel) / G,
+                lateralAccel = lateralAccel,
                 slipAngleRad = Mathf.Atan2(v, uEff),
                 rearGripUsage = rearUse,
             };

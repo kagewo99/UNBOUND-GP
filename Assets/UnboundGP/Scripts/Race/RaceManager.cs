@@ -51,7 +51,7 @@ namespace UnboundGP.Race
         GameContext ctx;
         TrackPath path;
         RaceHUD hud;
-        ChaseCamera chaseCam;
+        IRaceCamera raceCam;
 
         readonly List<Entrant> entrants = new List<Entrant>();
         Entrant playerEntrant;
@@ -75,15 +75,19 @@ namespace UnboundGP.Race
             hud = RaceHUD.Create();
             hud.SetMode($"{modeData.title} ── {ctx.Track.trackName}");
             hud.SetHint(modeData.playerDrives
-                ? "WASD/矢印: 運転   Space: ブレーキ   R: コース復帰"
+                ? "一人称視点  WASD/矢印: 運転   Space: ブレーキ   R: コース復帰"
                 : "観戦モード   Tab: カメラ切替   ※あなたのマシンはAIが運転しています");
 
-            // カメラセットアップ
+            // カメラセットアップ:Human GP は一人称(人体のGを自分の目で受ける)、
+            // Machine GP は三人称(人間不在のレースを外から眺める)。視点の対比でテーマを語る。
             var cam = Camera.main;
-            chaseCam = cam.gameObject.GetComponent<ChaseCamera>();
-            if (chaseCam == null) chaseCam = cam.gameObject.AddComponent<ChaseCamera>();
+            if (ctx.SelectedMode == GameMode.HumanGP)
+                raceCam = cam.gameObject.AddComponent<CockpitCamera>();
+            else
+                raceCam = cam.gameObject.AddComponent<ChaseCamera>();
+
             watchIndex = entrants.IndexOf(playerEntrant);
-            chaseCam.SetTarget(playerEntrant.car);
+            raceCam.SetTarget(playerEntrant.car);
         }
 
         /// <summary>シーンが空でも動くよう、カメラとライトを保証する。</summary>
@@ -340,7 +344,7 @@ namespace UnboundGP.Race
             if (Input.GetKeyDown(KeyCode.Tab))
             {
                 watchIndex = (watchIndex + 1) % entrants.Count;
-                chaseCam.SetTarget(entrants[watchIndex].car);
+                raceCam.SetTarget(entrants[watchIndex].car);
             }
         }
 

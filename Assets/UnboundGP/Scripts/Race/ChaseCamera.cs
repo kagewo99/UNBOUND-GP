@@ -3,10 +3,11 @@ using UnityEngine;
 namespace UnboundGP.Race
 {
     /// <summary>
-    /// 追従カメラ。速度で FOV が広がり、Machine GP の異常な速度域を体感させる。
-    /// SetTarget で観戦対象を切り替えられる (Machine GP の Tab 切り替え用)。
+    /// 三人称の追従カメラ(主に Machine GP の観戦用)。
+    /// 速度で FOV が広がり、異常な速度域を外から体感させる。
+    /// SetTarget で対象を切り替えられる (Tab 切り替え)。
     /// </summary>
-    public class ChaseCamera : MonoBehaviour
+    public class ChaseCamera : MonoBehaviour, IRaceCamera
     {
         CarController target;
         Camera cam;
