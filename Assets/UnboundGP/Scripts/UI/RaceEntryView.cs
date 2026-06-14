@@ -24,7 +24,16 @@ namespace UnboundGP.UI
             UiFactory.SetAnchors(trackPanel, new Vector2(0.05f, 0.78f), new Vector2(0.95f, 0.97f));
             trackText = UiFactory.CreateText(trackPanel, "", 19, TextAnchor.UpperLeft);
             trackText.supportRichText = true;
-            UiFactory.SetAnchors((RectTransform)trackText.transform, Vector2.zero, Vector2.one, new Vector2(20f, 10f), new Vector2(-20f, -10f));
+            UiFactory.SetAnchors((RectTransform)trackText.transform, Vector2.zero, Vector2.one, new Vector2(20f, 10f), new Vector2(-340f, -10f));
+
+            // レーシングホイール設定(キーボードのみなら不要)
+            var wheelBtn = UiFactory.CreateButton(trackPanel, "ハンドル設定 (レーシングホイール)",
+                () => WheelCalibrationOverlay.Open(null), new Color(0.3f, 0.35f, 0.5f), 18);
+            UiFactory.SetAnchors((RectTransform)wheelBtn.transform, new Vector2(1f, 0.5f), new Vector2(1f, 0.5f));
+            var wbRt = (RectTransform)wheelBtn.transform;
+            wbRt.pivot = new Vector2(1f, 0.5f);
+            wbRt.anchoredPosition = new Vector2(-16f, 0f);
+            wbRt.sizeDelta = new Vector2(300f, 56f);
 
             // ---- Human GP カード ----
             BuildCard(true, new Vector2(0.05f, 0.06f), new Vector2(0.48f, 0.74f), out humanCardText,

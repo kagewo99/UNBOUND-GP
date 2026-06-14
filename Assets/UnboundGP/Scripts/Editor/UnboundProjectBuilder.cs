@@ -29,6 +29,7 @@ namespace UnboundGP.EditorTools
 
             CreateDataAssets();
             CreateScenes();
+            InputAxisInstaller.EnsureAxes();   // レーシングホイール用の入力軸を用意
 
             EditorUtility.DisplayDialog("UNBOUND GP",
                 "セットアップ完了。\n\nAssets/UnboundGP/Scenes/MainMenu.unity を開いて再生してください。\n" +

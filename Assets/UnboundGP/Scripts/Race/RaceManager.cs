@@ -52,6 +52,7 @@ namespace UnboundGP.Race
         TrackPath path;
         RaceHUD hud;
         IRaceCamera raceCam;
+        UnboundGP.UI.WheelCalibrationOverlay calibration;
 
         readonly List<Entrant> entrants = new List<Entrant>();
         Entrant playerEntrant;
@@ -75,7 +76,7 @@ namespace UnboundGP.Race
             hud = RaceHUD.Create();
             hud.SetMode($"{modeData.title} ── {ctx.Track.trackName}");
             hud.SetHint(modeData.playerDrives
-                ? "一人称  W/↑:アクセル  S/↓:ブレーキ(停止後は後退)  A/D:操舵  Space:ブレーキ  R:コース復帰"
+                ? "一人称  W/↑:アクセル  S/↓:ブレーキ(停止後は後退)  A/D:操舵  R:コース復帰  F1:ハンドル設定"
                 : "観戦モード   Tab: カメラ切替   ※あなたのマシンはAIが運転しています");
 
             // カメラセットアップ:Human GP は一人称(人体のGを自分の目で受ける)、
@@ -178,6 +179,7 @@ namespace UnboundGP.Race
         // ----------------------------------------------------------------
         void Update()
         {
+            HandleCalibrationToggle();
             switch (phase)
             {
                 case Phase.Countdown: UpdateCountdown(); break;
@@ -186,6 +188,22 @@ namespace UnboundGP.Race
             }
             UpdateHud();
             UpdateSpectator();
+        }
+
+        /// <summary>F1 でハンドル設定(キャリブレーション)を開く。Human GP のみ。</summary>
+        void HandleCalibrationToggle()
+        {
+            if (ctx.SelectedMode != GameMode.HumanGP) return;
+            if (!Input.GetKeyDown(KeyCode.F1)) return;
+            if (calibration == null)
+            {
+                var pid = playerEntrant.car.GetComponent<PlayerInputDriver>();
+                calibration = UnboundGP.UI.WheelCalibrationOverlay.Open(pid, () => calibration = null);
+            }
+            else
+            {
+                calibration.CloseExternally();
+            }
         }
 
         void UpdateCountdown()
