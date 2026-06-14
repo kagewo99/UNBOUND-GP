@@ -93,6 +93,8 @@ namespace UnboundGP.Race
             prevVelocity = vel;
             Vector3 accelH = new Vector3(accelVec.x, 0f, accelVec.z);
             float instG = Mathf.Min(accelH.magnitude / 9.81f, MaxReportG);
+            // ほぼ停止中の物理ジッタによる偽Gは捨てる(ただし衝突=1G超のスパイクは通す)
+            if (CurrentSpeedMs < 0.5f && instG < 1.0f) instG = 0f;
             // 表示・判定は軽く平滑化(衝突の瞬間スパイクは通す)
             CurrentG = Mathf.Lerp(CurrentG, instG, 1f - Mathf.Exp(-12f * dt));
             LongitudinalGSigned = Vector3.Dot(accelH, fwd) / 9.81f;   // 加速+ / 制動-

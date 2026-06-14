@@ -121,7 +121,8 @@ namespace UnboundGP.Race
                 float revFalloff = Mathf.Max(0f, 1f - Mathf.Clamp01(backSpeed / reverseTop));
                 Fdrive = throttle * m * stats.acceleration * 0.5f * revFalloff;  // throttle<0
             }
-            float Fbrake = brake * m * stats.BrakeDecel(uEff);                    // 総制動
+            // 制動力は低速で絞る:止まった車をブレーキ力で動かさない(偽G・微振動の根絶)
+            float Fbrake = brake * m * stats.BrakeDecel(uEff) * Mathf.Clamp01(absU / 1.0f);
             float dir = u >= 0f ? 1f : -1f;
             float FxFront = -0.60f * Fbrake * dir;
             float FxRear = Fdrive - 0.40f * Fbrake * dir;
@@ -136,8 +137,10 @@ namespace UnboundGP.Race
             Fyf = Mathf.Clamp(Fyf, -frontLat, frontLat);
 
             // ---- 走行抵抗(空気抵抗+転がり) ----
+            // 転がり抵抗は速度ゼロ付近で滑らかに消す(dir の符号反転による微振動=偽Gを防ぐ)
             float cdA = (m * stats.acceleration * 0.25f) / (topMs * topMs);
-            float Fres = (cdA * u * absU) + (m * 0.015f * G * dir);
+            float rollDir = Mathf.Clamp(u / 0.5f, -1f, 1f);
+            float Fres = (cdA * u * absU) + (m * 0.015f * G * rollDir);
 
             // ---- 運動方程式(内部標準座標系) ----
             float cosD = Mathf.Cos(delta);
@@ -166,6 +169,16 @@ namespace UnboundGP.Race
                 // ---- アーケード安定化(走行中のみ) ----
                 v *= Mathf.Max(0f, 1f - GripAssist * dt);
                 r *= Mathf.Max(0f, 1f - YawDamp * dt);
+            }
+
+            // ---- 停止保持 ----
+            // 駆動入力がほぼ無く、ほぼ止まっているなら 0 へ“穏やかに”寄せる(静止摩擦)。
+            // 急に0にすると急減速G(偽G)に見えるため、約3m/s^2 でゆっくり詰める。
+            if (Mathf.Abs(throttle) < 0.02f && Mathf.Abs(u) < 0.3f)
+            {
+                u = Mathf.MoveTowards(u, 0f, 3f * dt);
+                v *= 0.2f;
+                r *= 0.2f;
             }
 
             lastLongAccel = Fx / m;
