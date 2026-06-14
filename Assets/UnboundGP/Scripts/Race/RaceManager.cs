@@ -75,7 +75,7 @@ namespace UnboundGP.Race
             hud = RaceHUD.Create();
             hud.SetMode($"{modeData.title} ── {ctx.Track.trackName}");
             hud.SetHint(modeData.playerDrives
-                ? "一人称視点  WASD/矢印: 運転   Space: ブレーキ   R: コース復帰"
+                ? "一人称  W/↑:アクセル  S/↓:ブレーキ(停止後は後退)  A/D:操舵  Space:ブレーキ  R:コース復帰"
                 : "観戦モード   Tab: カメラ切替   ※あなたのマシンはAIが運転しています");
 
             // カメラセットアップ:Human GP は一人称(人体のGを自分の目で受ける)、
@@ -310,7 +310,7 @@ namespace UnboundGP.Race
 
             hud.SetTelemetry(
                 watch.car.CurrentSpeedKmh,
-                watch.condition != null ? watch.condition.CurrentG : watch.car.CurrentLateralG,
+                watch.condition != null ? watch.condition.CurrentG : watch.car.CurrentG,
                 watch.condition != null ? watch.condition.BlackoutMeter : 0f,
                 watch.condition != null && watch.condition.IsBlackedOut,
                 humanMode);

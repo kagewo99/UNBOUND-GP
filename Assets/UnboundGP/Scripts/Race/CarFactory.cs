@@ -51,6 +51,7 @@ namespace UnboundGP.Race
 
             var car = root.AddComponent<CarController>();
             car.Setup(stats, input, condition);
+            car.AllowReverse = isPlayerControlled;   // 後退はプレイヤー機のみ
 
             // AIDriver は CarController 生成後に参照を渡す
             if (input is AIDriver aiDriver) aiDriver.Setup(car, path, condition);

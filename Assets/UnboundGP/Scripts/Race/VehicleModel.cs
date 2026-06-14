@@ -105,9 +105,22 @@ namespace UnboundGP.Race
             float Fyr = -FyrMax * TireCurve(alphaR);
 
             // ---- 縦力(駆動はリア、制動は前後配分) ----
+            // throttle は符号付き:正=前進、負=後退(プレイヤーのスタック脱出用)。
             float topMs = Mathf.Max(stats.EffectiveTopSpeedMs, 1f);
-            float falloff = Mathf.Max(0f, 1f - Mathf.Pow(Mathf.Clamp01(absU / topMs), 2f));
-            float Fdrive = throttle * m * stats.acceleration * falloff;          // リア駆動
+            float Fdrive;
+            if (throttle >= 0f)
+            {
+                float falloff = Mathf.Max(0f, 1f - Mathf.Pow(Mathf.Clamp01(absU / topMs), 2f));
+                Fdrive = throttle * m * stats.acceleration * falloff;            // リア駆動(前進)
+            }
+            else
+            {
+                // 後退:駆動力は控えめ、後退最高速(約14m/s)で頭打ち
+                const float reverseTop = 14f;
+                float backSpeed = u < 0f ? -u : 0f;
+                float revFalloff = Mathf.Max(0f, 1f - Mathf.Clamp01(backSpeed / reverseTop));
+                Fdrive = throttle * m * stats.acceleration * 0.5f * revFalloff;  // throttle<0
+            }
             float Fbrake = brake * m * stats.BrakeDecel(uEff);                    // 総制動
             float dir = u >= 0f ? 1f : -1f;
             float FxFront = -0.60f * Fbrake * dir;

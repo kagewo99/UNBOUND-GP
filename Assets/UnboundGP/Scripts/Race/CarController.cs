@@ -26,6 +26,9 @@ namespace UnboundGP.Race
 
         public float CurrentSpeedMs { get; private set; }
         public float CurrentSpeedKmh => CurrentSpeedMs * 3.6f;
+        /// <summary>総合体感G。加速・制動・旋回・衝突をすべて含む“実際に身体が受けたG”。失神判定の根拠。</summary>
+        public float CurrentG { get; private set; }
+        /// <summary>横G(コーナリング成分の絶対値, HUD補助表示用)。</summary>
         public float CurrentLateralG { get; private set; }
         /// <summary>横G(符号付き, 右方向が正)。一人称カメラの頭振り演出に使う。</summary>
         public float LateralGSigned { get; private set; }
@@ -34,10 +37,16 @@ namespace UnboundGP.Race
         /// <summary>車体スリップ角[deg]。HUD やエフェクト(タイヤスモーク)のフック用。</summary>
         public float SlipAngleDeg { get; private set; }
 
+        /// <summary>プレイヤー機のみ true。停止/低速で後退できる(スタック脱出用)。</summary>
+        public bool AllowReverse = false;
+
+        // 衝突などの瞬間的なGがゲームを壊さないよう、報告するGの上限。
+        const float MaxReportG = 50f;
+
         Rigidbody rb;
         IDriverInput input;
         bool grounded;
-        float prevSpeedMs;
+        Vector3 prevVelocity;
 
         public void Setup(MachineStats stats, IDriverInput driverInput, DriverCondition condition)
         {
@@ -70,7 +79,7 @@ namespace UnboundGP.Race
             Vector3 vel = rb.velocity;
             float vyWorld = vel.y;
 
-            float u = Vector3.Dot(vel, fwd);                 // 前方
+            float u = Vector3.Dot(vel, fwd);                 // 前方(後退時は負)
             float rightComp = Vector3.Dot(vel, right);       // 右成分
             Model.forwardSpeed = u;
             Model.lateralSpeed = -rightComp;                 // 内部は左が正
@@ -78,11 +87,43 @@ namespace UnboundGP.Race
 
             CurrentSpeedMs = Mathf.Abs(u);
 
-            // ---- ドライバーの状態が入力を歪める(Human GP の核心) ----
+            // ---- 実際に身体が受けた加速度を“前フレームの実速度との差”から求める ----
+            // 駆動・制動・旋回・衝突のすべてがここに現れる。重力(縦)は除外して水平成分のみ。
+            Vector3 accelVec = (vel - prevVelocity) / Mathf.Max(dt, 1e-4f);
+            prevVelocity = vel;
+            Vector3 accelH = new Vector3(accelVec.x, 0f, accelVec.z);
+            float instG = Mathf.Min(accelH.magnitude / 9.81f, MaxReportG);
+            // 表示・判定は軽く平滑化(衝突の瞬間スパイクは通す)
+            CurrentG = Mathf.Lerp(CurrentG, instG, 1f - Mathf.Exp(-12f * dt));
+            LongitudinalGSigned = Vector3.Dot(accelH, fwd) / 9.81f;   // 加速+ / 制動-
+            LateralGSigned = Vector3.Dot(accelH, right) / 9.81f;       // 右+ / 左-
+            CurrentLateralG = Mathf.Abs(LateralGSigned);
+
+            // ---- 入力(失神・後退・カウントダウンを織り込む) ----
             float control = Condition != null ? Condition.ControlFactor : 1f;
-            float throttle = InputEnabled ? Mathf.Clamp01(input.Throttle) * control : 0f;
-            float brake = InputEnabled ? Mathf.Clamp01(input.Brake) : 1f;
             float steer = InputEnabled ? Mathf.Clamp(input.Steer, -1f, 1f) * Mathf.Lerp(0.25f, 1f, control) : 0f;
+            float throttle, brake;
+            if (!InputEnabled)
+            {
+                throttle = 0f;
+                brake = 1f;     // カウントダウン中は停止
+            }
+            else
+            {
+                float upI = Mathf.Clamp01(input.Throttle);
+                float downI = Mathf.Clamp01(input.Brake);
+                if (AllowReverse && downI > 0.01f && u < 2f)
+                {
+                    // 停止/低速でブレーキ入力 → 後退(スタック脱出)
+                    throttle = -downI;
+                    brake = 0f;
+                }
+                else
+                {
+                    throttle = upI * control;   // 失神でアクセルが鈍る
+                    brake = downI;
+                }
+            }
 
             if (Condition != null && Condition.IsBlackedOut)
             {
@@ -107,23 +148,10 @@ namespace UnboundGP.Race
                 float stickG = Stats.downforceFactor * rr * rr * 0.6f;
                 rb.AddForce(Vector3.down * (Stats.weightKg * 9.81f * stickG));
 
-                CurrentLateralG = outp.lateralG;
-                // 内部は左が正。カメラ用に「右方向が正」へ反転。
-                LateralGSigned = -outp.lateralAccel / 9.81f;
                 SlipAngleDeg = outp.slipAngleRad * Mathf.Rad2Deg;
             }
-            else
-            {
-                // 空中:操舵を切り、物理に任せて自然落下させる
-                CurrentLateralG = 0f;
-                LateralGSigned = 0f;
-            }
 
-            // 縦G(速度の時間変化)。一人称カメラのピッチに使う。
-            LongitudinalGSigned = (CurrentSpeedMs - prevSpeedMs) / Mathf.Max(dt, 1e-4f) / 9.81f;
-            prevSpeedMs = CurrentSpeedMs;
-
-            Condition?.ReportG(CurrentLateralG, dt);
+            Condition?.ReportG(CurrentG, dt);
         }
 
         static Vector3 Flatten(Vector3 v)
@@ -138,6 +166,8 @@ namespace UnboundGP.Race
             rb.velocity = Vector3.zero;
             rb.angularVelocity = Vector3.zero;
             Model.Reset();
+            prevVelocity = Vector3.zero;   // 復帰時にGスパイクを出さない
+            CurrentG = 0f;
             transform.SetPositionAndRotation(position + Vector3.up * 0.6f, rotation);
         }
     }
