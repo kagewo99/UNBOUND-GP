@@ -27,7 +27,7 @@ namespace UnboundGP.Race
         public const float WheelBase = 3.4f;     // L
         public const float CogToFront = 1.85f;   // lf (前寄りに置くと後輪荷重が増える=トラクション寄り)
         public const float CogToRear = 1.55f;    // lr
-        public const float CogHeight = 0.30f;    // h 低重心
+        public const float CogHeight = 0.32f;    // h 重心高(やや高めで加減速の荷重移動を体感寄りに)
         public const float MaxSteerDeg = 26f;
         public const float TireB = 18f;          // タイヤカーブの初期勾配(高いほど小さな滑りで食う=ダルつかない)
         public const float TireC = 1.15f;        // 形状(1付近で限界が穏やか=スナップしにくく御しやすい)
@@ -126,11 +126,12 @@ namespace UnboundGP.Race
             // 制動力は低速で絞る:止まった車をブレーキ力で動かさない(偽G・微振動の根絶)
             float Fbrake = brake * m * stats.BrakeDecel(uEff) * Mathf.Clamp01(absU / 1.0f);
             float dir = u >= 0f ? 1f : -1f;
-            // 制動は前寄り配分(後輪が抜けてスピンしにくい)。駆動はリアに加わる。
+            // 制動は前寄り配分(直進安定=後輪が抜けてスピンしにくい)。駆動はリアに加わる。
             float FxFront = -0.72f * Fbrake * dir;
             float FxRear = Fdrive - 0.28f * Fbrake * dir;
-            // 各アクスルの縦力をタイヤの縦グリップ上限でクランプ(ロック=スピンを防ぐ ABS 的処理)
-            FxFront = Mathf.Clamp(FxFront, -FyfMax, FyfMax);
+            // 各アクスルの縦力をグリップ上限でクランプ(ロック=スピン防止のABS的処理)。
+            // 前輪は上限の0.90までに留め、残り1割の横グリップでブレーキ中もノーズが食う(トレイルブレーキ)。
+            FxFront = Mathf.Clamp(FxFront, -0.90f * FyfMax, 0.90f * FyfMax);
             FxRear = Mathf.Clamp(FxRear, -FyrMax, FyrMax);
 
             // ---- フリクションサークル:縦に使った分だけ横グリップが減る ----

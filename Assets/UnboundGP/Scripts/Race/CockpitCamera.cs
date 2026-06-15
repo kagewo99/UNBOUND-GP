@@ -26,7 +26,7 @@ namespace UnboundGP.Race
         // Gによる頭の振れ量(視覚的に誇張)
         const float LateralLean = 0.10f;   // 横Gあたりの頭の横移動 [m/G]
         const float LateralRoll = 1.3f;    // 横Gあたりのカメラロール [deg/G]
-        const float PitchPerG = 0.7f;      // 縦Gあたりのピッチ [deg/G]
+        const float PitchPerG = 1.2f;      // 縦Gあたりのピッチ [deg/G](制動時のノーズダイブを強調)
 
         Vector3 smoothHeadOffset;
         float smoothRoll, smoothPitch;

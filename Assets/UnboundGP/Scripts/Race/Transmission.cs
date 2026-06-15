@@ -32,10 +32,13 @@ namespace UnboundGP.Race
         public float Rpm { get; private set; } = IdleRPM;
         /// <summary>直近の変速演出用フラッシュ(0→1で減衰)。HUD用。</summary>
         public float ShiftFlash { get; private set; }
+        /// <summary>レブリミッターに当たっているか(HUD点滅用)。</summary>
+        public bool AtLimiter { get; private set; }
 
         float finalDrive = 4.5f;
         float shiftCutTimer;
         float shiftCooldown;
+        bool limiterCut;
 
         public int GearCount => GearRatios.Length;
 
@@ -99,16 +102,11 @@ namespace UnboundGP.Race
 
             Rpm = RpmFromSpeed(signedSpeedMs, Gear);
 
-            // オート変速
+            // オート変速(オート時のみ。レッド手前で上げるのでリミッターには当たらない)
             if (AutoShift && shiftCooldown <= 0f)
             {
                 if (Rpm > ShiftUpRPM && Gear < GearCount && throttle > 0.1f) DoShift(+1);
                 else if (Rpm < ShiftDownRPM && Gear > 1) DoShift(-1);
-            }
-            // マニュアルでもレッド張り付き防止の保険アップシフト
-            else if (!AutoShift && Rpm > RedlineRPM * 1.02f && Gear < GearCount && shiftCooldown <= 0f)
-            {
-                DoShift(+1);
             }
 
             // 変速中はトルクカット(駆動が一瞬抜ける=変速の手応え)
@@ -117,7 +115,17 @@ namespace UnboundGP.Race
                 shiftCutTimer -= dt;
                 return 0.05f;
             }
-            return TorqueCurve(Rpm) * Mathf.Clamp01(throttle <= 0f ? 1f : 1f);
+
+            // レブリミッター:レッドライン到達で点火カット。これ以上は回らない=加速が止まる。
+            // マニュアルでは自動で上げないので、自分でシフトアップしない限り頭打ちのまま(F1的)。
+            if (Rpm >= RedlineRPM)
+            {
+                AtLimiter = true;
+                limiterCut = !limiterCut;       // 軽くばたつかせて“当たっている”感触
+                return limiterCut ? 0.0f : 0.20f;
+            }
+            AtLimiter = false;
+            return TorqueCurve(Rpm);
         }
 
         public void ShiftUp() { if (!IsCVT) DoShift(+1); }

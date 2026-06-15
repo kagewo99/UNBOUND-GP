@@ -132,12 +132,13 @@ namespace UnboundGP.Race
         public void SetStandings(string s) => standingsText.text = s;
 
         /// <summary>ギア・回転数(タコメータ)を更新する。</summary>
-        public void SetGearRPM(string gearLabel, float rpm, float redline, float maxRpm, bool isCVT, bool autoShift)
+        public void SetGearRPM(string gearLabel, float rpm, float redline, float maxRpm, bool isCVT, bool autoShift, bool atLimiter)
         {
             gearText.text = gearLabel;
             if (isCVT)
             {
                 gearText.fontSize = 40;
+                gearText.color = Color.white;
                 rpmText.text = "無段変速";
                 shiftModeText.text = "CVT";
                 rpmBar.fillAmount = Mathf.Clamp01(rpm / maxRpm);
@@ -146,11 +147,12 @@ namespace UnboundGP.Race
             else
             {
                 gearText.fontSize = 64;
+                // リミッター時はギアを点滅赤に=「シフトアップしろ」のサイン
+                gearText.color = atLimiter && (Time.unscaledTime % 0.2f < 0.1f)
+                    ? new Color(1f, 0.25f, 0.2f) : Color.white;
                 rpmText.text = $"{rpm:0} RPM";
                 shiftModeText.text = autoShift ? "AUTO" : "MANUAL";
-                float t = Mathf.Clamp01(rpm / maxRpm);
-                rpmBar.fillAmount = t;
-                // レッドライン手前から赤へ
+                rpmBar.fillAmount = Mathf.Clamp01(rpm / maxRpm);
                 rpmBar.color = rpm >= redline
                     ? new Color(0.95f, 0.2f, 0.15f)
                     : Color.Lerp(new Color(0.3f, 0.85f, 0.4f), new Color(0.95f, 0.7f, 0.1f), Mathf.Clamp01((rpm / redline - 0.6f) / 0.4f));

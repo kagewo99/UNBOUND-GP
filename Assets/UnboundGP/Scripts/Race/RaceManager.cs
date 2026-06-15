@@ -336,7 +336,7 @@ namespace UnboundGP.Race
                 humanMode);
 
             var gb = watch.car.Gearbox;
-            hud.SetGearRPM(gb.GearLabel, gb.Rpm, Transmission.RedlineRPM, Transmission.MaxRPM, gb.IsCVT, gb.AutoShift);
+            hud.SetGearRPM(gb.GearLabel, gb.Rpm, Transmission.RedlineRPM, Transmission.MaxRPM, gb.IsCVT, gb.AutoShift, gb.AtLimiter);
 
             float t = phase == Phase.Countdown ? 0f : Time.time - watch.lapStartTime;
             hud.SetLap(
