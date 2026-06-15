@@ -124,8 +124,12 @@ namespace UnboundGP.Race
             // 制動力は低速で絞る:止まった車をブレーキ力で動かさない(偽G・微振動の根絶)
             float Fbrake = brake * m * stats.BrakeDecel(uEff) * Mathf.Clamp01(absU / 1.0f);
             float dir = u >= 0f ? 1f : -1f;
-            float FxFront = -0.60f * Fbrake * dir;
-            float FxRear = Fdrive - 0.40f * Fbrake * dir;
+            // 制動は前寄り配分(後輪が抜けてスピンしにくい)。駆動はリアに加わる。
+            float FxFront = -0.72f * Fbrake * dir;
+            float FxRear = Fdrive - 0.28f * Fbrake * dir;
+            // 各アクスルの縦力をタイヤの縦グリップ上限でクランプ(ロック=スピンを防ぐ ABS 的処理)
+            FxFront = Mathf.Clamp(FxFront, -FyfMax, FyfMax);
+            FxRear = Mathf.Clamp(FxRear, -FyrMax, FyrMax);
 
             // ---- フリクションサークル:縦に使った分だけ横グリップが減る ----
             float rearUse = Mathf.Clamp01(Mathf.Abs(FxRear) / Mathf.Max(FyrMax, 1f));

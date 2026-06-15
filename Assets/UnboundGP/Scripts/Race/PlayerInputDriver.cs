@@ -30,9 +30,12 @@ namespace UnboundGP.Race
         void Update()
         {
             // ---- キーボード ----
-            float v = Input.GetAxisRaw("Vertical");
-            float kThrottle = Mathf.Max(0f, v);
-            float kBrake = Mathf.Max(0f, -v);
+            // アクセルとブレーキを“独立したキー”で読む。同じ軸(Vertical)だと W+S が打ち消し合い、
+            // 同時踏みが効かず・片方を離した瞬間に他方が満タンになってスピンする原因になる。
+            bool up = Input.GetKey(KeyCode.W) || Input.GetKey(KeyCode.UpArrow);
+            bool down = Input.GetKey(KeyCode.S) || Input.GetKey(KeyCode.DownArrow);
+            float kThrottle = up ? 1f : 0f;
+            float kBrake = down ? 1f : 0f;
             if (Input.GetKey(KeyCode.Space)) kBrake = 1f;
             float kSteer = Input.GetAxis("Horizontal");
 
