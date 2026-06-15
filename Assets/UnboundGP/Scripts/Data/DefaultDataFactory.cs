@@ -144,7 +144,7 @@ namespace UnboundGP.Data
             t.name = "RealityTrack_Suzuka";
             t.trackName = "Reality Track 01: SUZUKA UNBOUND";
             t.description = "立体交差を持つ世界唯一の8の字レイアウトを持つ、あのサーキットへのオマージュ。高速S字と橋越えバックストレートが、無制限マシンの旋回Gを容赦なく引き出す。";
-            t.roadWidth = 14f;
+            t.roadWidth = 20f;
             t.lapCount = 3;
             t.controlPoints = new List<Vector3>(SuzukaTrackDefinition.CreateControlPoints());
             return t;

@@ -17,18 +17,33 @@ namespace UnboundGP.Track
             var path = root.AddComponent<TrackPath>();
             path.Init(data, 1000);
 
+            // レース路面(roadWidth)の外側にランオフ(芝)を設け、その奥に壁を置く。
+            // こうすると“少しはみ出しただけで壁”ではなく、枠の外に逃げ場(ランオフ)がある。
+            float runoff = RunoffWidthPerSide;
+            float totalWidth = data.roadWidth + runoff * 2f;
+
             BuildGround(root.transform);
-            BuildRoad(root.transform, path, data.roadWidth);
-            BuildWalls(root.transform, path, data.roadWidth * 0.5f + 0.8f);
+            // 1) 走行可能面(全幅・芝色)= 当たり判定はこれ
+            BuildSurface(root.transform, path, totalWidth, new Color(0.20f, 0.42f, 0.20f), 0f, true, "Runoff");
+            // 2) レーシング路面(アスファルト)= 見た目。数cm上に重ねる(当たりは芝側)
+            BuildSurface(root.transform, path, data.roadWidth, new Color(0.16f, 0.16f, 0.18f), 0.03f, false, "Road");
+            // 3) 縁石ライン(枠の境界)
+            BuildEdgeLines(root.transform, path, data.roadWidth);
+            // 4) 壁はランオフの外縁(=路面からだいぶ奥)
+            BuildWalls(root.transform, path, totalWidth * 0.5f + 0.8f);
             BuildStartLine(root.transform, path, data.roadWidth);
 
             return path;
         }
 
+        /// <summary>レース路面の片側ランオフ幅 [m]。</summary>
+        public const float RunoffWidthPerSide = 9f;
+
         // ----------------------------------------------------------------
-        // 路面
+        // 路面(汎用サーフェス)
         // ----------------------------------------------------------------
-        static void BuildRoad(Transform parent, TrackPath path, float width)
+        static void BuildSurface(Transform parent, TrackPath path, float width, Color color,
+            float yOffset, bool addCollider, string name)
         {
             int n = path.SampleCount;
             float hw = width * 0.5f;
@@ -40,8 +55,9 @@ namespace UnboundGP.Track
             {
                 Vector3 fwd = path.Forwards[i];
                 Vector3 right = Vector3.Cross(Vector3.up, fwd).normalized;
-                verts[i * 2] = path.Points[i] - right * hw;     // 左端
-                verts[i * 2 + 1] = path.Points[i] + right * hw; // 右端
+                Vector3 c = path.Points[i] + Vector3.up * yOffset;
+                verts[i * 2] = c - right * hw;     // 左端
+                verts[i * 2 + 1] = c + right * hw; // 右端
             }
 
             for (int i = 0; i < n; i++)
@@ -55,18 +71,62 @@ namespace UnboundGP.Track
                 tris[t + 3] = r0; tris[t + 4] = l1; tris[t + 5] = r1;
             }
 
-            var mesh = new Mesh { name = "RoadMesh" };
+            var mesh = new Mesh { name = name + "Mesh" };
             mesh.indexFormat = UnityEngine.Rendering.IndexFormat.UInt32;
             mesh.vertices = verts;
             mesh.triangles = tris;
             mesh.RecalculateNormals();
             mesh.RecalculateBounds();
 
-            var go = new GameObject("Road");
+            var go = new GameObject(name);
             go.transform.SetParent(parent, false);
             go.AddComponent<MeshFilter>().sharedMesh = mesh;
-            go.AddComponent<MeshRenderer>().sharedMaterial = MakeMaterial(new Color(0.16f, 0.16f, 0.18f));
-            go.AddComponent<MeshCollider>().sharedMesh = mesh;
+            go.AddComponent<MeshRenderer>().sharedMaterial = MakeMaterial(color);
+            if (addCollider) go.AddComponent<MeshCollider>().sharedMesh = mesh;
+        }
+
+        // ----------------------------------------------------------------
+        // 縁石ライン(レース路面の左右の縁=枠)
+        // ----------------------------------------------------------------
+        static void BuildEdgeLines(Transform parent, TrackPath path, float roadWidth)
+        {
+            int n = path.SampleCount;
+            float hw = roadWidth * 0.5f;
+            const float lineW = 0.6f;
+            var matA = MakeMaterial(new Color(0.85f, 0.85f, 0.88f));
+            var matB = MakeMaterial(new Color(0.8f, 0.2f, 0.2f));
+
+            for (int side = -1; side <= 1; side += 2)
+            {
+                var verts = new Vector3[n * 2];
+                var tris = new int[n * 6];
+                var cols = new Color[n * 2];
+                for (int i = 0; i < n; i++)
+                {
+                    Vector3 right = Vector3.Cross(Vector3.up, path.Forwards[i]).normalized;
+                    Vector3 edge = path.Points[i] + right * (hw * side) + Vector3.up * 0.05f;
+                    verts[i * 2] = edge - right * (lineW * 0.5f);
+                    verts[i * 2 + 1] = edge + right * (lineW * 0.5f);
+                }
+                for (int i = 0; i < n; i++)
+                {
+                    int next = (i + 1) % n;
+                    int l0 = i * 2, r0 = i * 2 + 1, l1 = next * 2, r1 = next * 2 + 1, t = i * 6;
+                    tris[t] = l0; tris[t + 1] = l1; tris[t + 2] = r0;
+                    tris[t + 3] = r0; tris[t + 4] = l1; tris[t + 5] = r1;
+                }
+                var mesh = new Mesh { name = "EdgeLine" };
+                mesh.indexFormat = UnityEngine.Rendering.IndexFormat.UInt32;
+                mesh.vertices = verts;
+                mesh.triangles = tris;
+                mesh.RecalculateNormals();
+                mesh.RecalculateBounds();
+                var go = new GameObject("EdgeLine");
+                go.transform.SetParent(parent, false);
+                go.AddComponent<MeshFilter>().sharedMesh = mesh;
+                // 赤白を交互にして縁石らしく(セグメントごとの色分けは簡略化し単色)
+                go.AddComponent<MeshRenderer>().sharedMaterial = side < 0 ? matA : matB;
+            }
         }
 
         // ----------------------------------------------------------------

@@ -117,11 +117,11 @@ namespace UnboundGP.Race
             }
             else
             {
-                // 後退:駆動力は控えめ、後退最高速(約14m/s)で頭打ち
-                const float reverseTop = 14f;
+                // 後退:駆動力は控えめ、後退最高速(約16m/s)で頭打ち
+                const float reverseTop = 16f;
                 float backSpeed = u < 0f ? -u : 0f;
                 float revFalloff = Mathf.Max(0f, 1f - Mathf.Clamp01(backSpeed / reverseTop));
-                Fdrive = throttle * m * stats.acceleration * 0.5f * revFalloff;  // throttle<0
+                Fdrive = throttle * m * stats.acceleration * 0.55f * revFalloff * driveTorque; // throttle<0
             }
             // 制動力は低速で絞る:止まった車をブレーキ力で動かさない(偽G・微振動の根絶)
             float Fbrake = brake * m * stats.BrakeDecel(uEff) * Mathf.Clamp01(absU / 1.0f);

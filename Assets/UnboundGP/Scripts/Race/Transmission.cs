@@ -28,12 +28,17 @@ namespace UnboundGP.Race
 
         public bool IsCVT { get; private set; }
         public bool AutoShift = true;
-        public int Gear { get; private set; } = 1;    // 1..8
+        public int Gear { get; private set; } = 1;    // -1=R, 0=N, 1..8
         public float Rpm { get; private set; } = IdleRPM;
         /// <summary>直近の変速演出用フラッシュ(0→1で減衰)。HUD用。</summary>
         public float ShiftFlash { get; private set; }
         /// <summary>レブリミッターに当たっているか(HUD点滅用)。</summary>
         public bool AtLimiter { get; private set; }
+
+        public const int ReverseGear = -1;
+        public const int NeutralGear = 0;
+        const float SelectSpeed = 3f;        // この速度[m/s]未満でのみ N/R へ入れられる
+        const float ReverseRatio = 3.2f;
 
         float finalDrive = 4.5f;
         float shiftCutTimer;
@@ -42,11 +47,16 @@ namespace UnboundGP.Race
 
         public int GearCount => GearRatios.Length;
 
+        /// <summary>駆動方向。+1=前進, 0=ニュートラル, -1=後退。</summary>
+        public int DriveDirection => IsCVT ? 1 : (Gear < 0 ? -1 : (Gear == 0 ? 0 : 1));
+
         public string GearLabel
         {
             get
             {
                 if (IsCVT) return "CVT";
+                if (Gear == ReverseGear) return "R";
+                if (Gear == NeutralGear) return "N";
                 return Gear.ToString();
             }
         }
@@ -65,8 +75,9 @@ namespace UnboundGP.Race
 
         float RpmFromSpeed(float speedMs, int gear)
         {
+            float ratio = gear == ReverseGear ? ReverseRatio : GearRatios[Mathf.Max(gear, 1) - 1];
             float wheelRps = Mathf.Abs(speedMs) / (2f * Mathf.PI * WheelRadius);
-            return Mathf.Max(IdleRPM * 0.4f, wheelRps * GearRatios[gear - 1] * finalDrive * 60f);
+            return Mathf.Max(IdleRPM * 0.4f, wheelRps * ratio * finalDrive * 60f);
         }
 
         /// <summary>
@@ -100,9 +111,27 @@ namespace UnboundGP.Race
                 return 1.02f;
             }
 
+            // ---- ニュートラル:駆動なし。エンジンは空ぶかし回転 ----
+            if (Gear == NeutralGear)
+            {
+                AtLimiter = false;
+                Rpm = Mathf.Lerp(Rpm, IdleRPM * (1f + throttle * 1.4f), 5f * dt);
+                return 0f;
+            }
+
+            // ---- リバース:後退用の素直なトルク ----
+            if (Gear == ReverseGear)
+            {
+                AtLimiter = false;
+                Rpm = RpmFromSpeed(signedSpeedMs, ReverseGear);
+                if (shiftCutTimer > 0f) { shiftCutTimer -= dt; return 0.05f; }
+                return 0.85f;
+            }
+
+            // ---- 前進ギア ----
             Rpm = RpmFromSpeed(signedSpeedMs, Gear);
 
-            // オート変速(オート時のみ。レッド手前で上げるのでリミッターには当たらない)
+            // オート変速(前進ギア間のみ。レッド手前で上げるのでリミッターには当たらない)
             if (AutoShift && shiftCooldown <= 0f)
             {
                 if (Rpm > ShiftUpRPM && Gear < GearCount && throttle > 0.1f) DoShift(+1);
@@ -128,12 +157,28 @@ namespace UnboundGP.Race
             return TorqueCurve(Rpm);
         }
 
-        public void ShiftUp() { if (!IsCVT) DoShift(+1); }
-        public void ShiftDown() { if (!IsCVT) DoShift(-1); }
-
-        void DoShift(int dir)
+        /// <summary>シフトアップ。R→N→1→…→8。speedMs は N/R 解除可否の判定に使う。</summary>
+        public void ShiftUp(float speedMs)
         {
-            int next = Mathf.Clamp(Gear + dir, 1, GearCount);
+            if (IsCVT) return;
+            if (Gear == ReverseGear) SetGear(NeutralGear);
+            else if (Gear == NeutralGear) SetGear(1);
+            else if (Gear < GearCount) SetGear(Gear + 1);
+        }
+
+        /// <summary>シフトダウン。8→…→1→N→R。N/R へは低速時のみ入れられる。</summary>
+        public void ShiftDown(float speedMs)
+        {
+            if (IsCVT) return;
+            if (Gear > 1) SetGear(Gear - 1);
+            else if (Gear == 1 && Mathf.Abs(speedMs) < SelectSpeed) SetGear(NeutralGear);
+            else if (Gear == NeutralGear && Mathf.Abs(speedMs) < SelectSpeed) SetGear(ReverseGear);
+        }
+
+        void DoShift(int dir) => SetGear(Mathf.Clamp(Gear + dir, 1, GearCount));
+
+        void SetGear(int next)
+        {
             if (next == Gear) return;
             Gear = next;
             shiftCutTimer = ShiftCutSeconds;

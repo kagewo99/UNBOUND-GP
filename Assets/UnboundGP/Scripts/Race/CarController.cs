@@ -38,9 +38,6 @@ namespace UnboundGP.Race
         /// <summary>車体スリップ角[deg]。HUD やエフェクト(タイヤスモーク)のフック用。</summary>
         public float SlipAngleDeg { get; private set; }
 
-        /// <summary>プレイヤー機のみ true。停止/低速で後退できる(スタック脱出用)。</summary>
-        public bool AllowReverse = false;
-
         // 衝突などの瞬間的なGがゲームを壊さないよう、報告するGの上限。
         const float MaxReportG = 50f;
 
@@ -103,53 +100,38 @@ namespace UnboundGP.Race
             LateralGSigned = Vector3.Dot(accelH, right) / 9.81f;       // 右+ / 左-
             CurrentLateralG = Mathf.Abs(LateralGSigned);
 
-            // ---- 入力(失神・後退・カウントダウンを織り込む) ----
+            // ---- シフト操作(プレイヤーのみ。AI/CVTはオート)----
+            if (input is PlayerInputDriver pid)
+            {
+                if (pid.ConsumeShiftUp()) { Gearbox.AutoShift = false; Gearbox.ShiftUp(u); }
+                if (pid.ConsumeShiftDown()) { Gearbox.AutoShift = false; Gearbox.ShiftDown(u); }
+                if (pid.ConsumeToggleAuto()) Gearbox.AutoShift = !Gearbox.AutoShift;
+            }
+
+            // ---- 入力(失神・ギア方向・カウントダウンを織り込む)----
             float control = Condition != null ? Condition.ControlFactor : 1f;
             float steer = InputEnabled ? Mathf.Clamp(input.Steer, -1f, 1f) * Mathf.Lerp(0.25f, 1f, control) : 0f;
-            float throttle, brake;
-            if (!InputEnabled)
-            {
-                throttle = 0f;
-                brake = 1f;     // カウントダウン中は停止
-            }
-            else
-            {
-                float upI = Mathf.Clamp01(input.Throttle);
-                float downI = Mathf.Clamp01(input.Brake);
-                if (AllowReverse && downI > 0.01f && u < 2f)
-                {
-                    // 停止/低速でブレーキ入力 → 後退(スタック脱出)
-                    throttle = -downI;
-                    brake = 0f;
-                }
-                else
-                {
-                    throttle = upI * control;   // 失神でアクセルが鈍る
-                    brake = downI;
-                }
-            }
+            float accelInput = InputEnabled ? Mathf.Clamp01(input.Throttle) * control : 0f;
+            float brake = InputEnabled ? Mathf.Clamp01(input.Brake) : 1f;  // カウントダウン中は停止
 
             if (Condition != null && Condition.IsBlackedOut)
             {
-                // 失神中:アクセルから足が落ち、ステアは固まる。マシンは慣性のまま壁へ向かう。
-                throttle = 0f;
+                accelInput = 0f;
                 brake = 0.15f;
                 steer = 0f;
             }
 
-            // ---- 変速機(RPM/ギア/トルク) ----
-            // プレイヤーのシフト操作(マニュアル)。AI/CVTはオート。
-            if (input is PlayerInputDriver pid)
-            {
-                if (pid.ConsumeShiftUp()) { Gearbox.AutoShift = false; Gearbox.ShiftUp(); }
-                if (pid.ConsumeShiftDown()) { Gearbox.AutoShift = false; Gearbox.ShiftDown(); }
-                if (pid.ConsumeToggleAuto()) Gearbox.AutoShift = !Gearbox.AutoShift;
-            }
-            float fwdThrottle = Mathf.Max(0f, throttle);
-            float driveTorque = Gearbox.Tick(u, fwdThrottle, dt);
-            // エンジンブレーキ:アクセルオフで軽く減速(リフトの手応え)。後退中は効かせない。
-            if (throttle >= 0f)
-                brake = Mathf.Max(brake, Gearbox.EngineBrake(fwdThrottle));
+            // 後退中はステアの向きが逆に感じるため反転(前向き視点でも直感に合わせる)
+            if (u < -0.3f || Gearbox.Gear == Transmission.ReverseGear) steer = -steer;
+
+            // ギアの駆動方向に応じて符号付きスロットルを作る(R=後退, N=駆動なし, 前進=前へ)
+            int driveDir = Gearbox.DriveDirection;
+            float throttle = driveDir * accelInput;
+
+            float driveTorque = Gearbox.Tick(u, accelInput, dt);
+            // エンジンブレーキ:前進・アクセルオフで軽く減速(リフトの手応え)
+            if (driveDir > 0 && accelInput < 0.05f)
+                brake = Mathf.Max(brake, Gearbox.EngineBrake(accelInput));
 
             if (grounded)
             {
