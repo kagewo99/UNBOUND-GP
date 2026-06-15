@@ -29,15 +29,14 @@ namespace UnboundGP.Race
         public const float CogToRear = 1.55f;    // lr
         public const float CogHeight = 0.32f;    // h 重心高(やや高めで加減速の荷重移動を体感寄りに)
         public const float MaxSteerDeg = 26f;
-        public const float TireB = 18f;          // タイヤカーブの初期勾配(高いほど小さな滑りで食う=ダルつかない)
-        public const float TireC = 1.15f;        // 形状(1付近で限界が穏やか=スナップしにくく御しやすい)
+        public const float TireB = 20f;          // タイヤカーブの初期勾配(高いほど小さな滑りで食う=ダルつかない)
+        public const float TireC = 1.20f;        // 形状(1付近で限界が穏やか=スナップしにくく御しやすい)
         const float G = 9.81f;
 
-        // アーケード安定化:キーボード(舵が実質ON/OFF)でも破綻しないよう、
-        // 横滑りとヨーの暴れを毎ステップ穏やかに減衰させる。限界域の挙動は残しつつ、
-        // 「とんでもなく横に流れ続ける」のを防いで“狙った所へ行く”手応えにする。
-        public const float GripAssist = 3.0f;    // 横速度の追加減衰 [1/s]
-        public const float YawDamp = 1.2f;       // ヨーレートの追加減衰 [1/s]
+        // アーケード安定化:キーボードでも破綻しないよう、横滑りとヨーの暴れを減衰させる。
+        // ただし高速域でのみ効かせ(VehicleModel側で速度重み付け)、低中速の素直な回頭は殺さない。
+        public const float GripAssist = 2.5f;    // 横速度の追加減衰 [1/s](高速時)
+        public const float YawDamp = 1.5f;       // ヨーレートの追加減衰 [1/s](高速時)
 
         // ---- 状態(内部標準座標系) ----
         public float forwardSpeed;   // u  [m/s] 前方
@@ -163,19 +162,26 @@ namespace UnboundGP.Race
             v += dv;
             r += dr;
 
-            // ---- 低速はキネマティック操舵へブレンド(取り回し&ジッタ抑制) ----
-            if (absU < 6f)
+            float spd = Mathf.Abs(u);
+
+            // ---- 低速はキネマティック(幾何)操舵へブレンド(dt 非依存)----
+            // 二輪モデルは低速で数学的に破綻するため、低速ほど幾何ヨー r=v·tanδ/L へ寄せる。
+            // これで「低速ならブレーキ無しでも素直に・タイトに曲がる」=実車的な取り回しになる。
+            float kinWeight = 1f - Mathf.Clamp01((spd - 4f) / 14f);   // ~4m/s以下=1, 18m/s以上=0
+            if (kinWeight > 0f)
             {
-                float kinR = u * Mathf.Tan(delta) / WheelBase; // 二輪幾何のヨー
-                float blend = 1f - Mathf.Clamp01(absU / 6f);
-                r = Mathf.Lerp(r, kinR, blend);
-                v = Mathf.Lerp(v, 0f, blend * 0.5f);
+                float kinR = u * Mathf.Tan(delta) / WheelBase;
+                r = Mathf.Lerp(r, kinR, kinWeight);
+                v = Mathf.Lerp(v, 0f, kinWeight * 0.8f);
             }
-            else
+
+            // ---- 安定化は高速ほど強める ----
+            // 低中速は素直に曲げ(アンダーを出さない)、高速はどっしり安定させる(暴れ防止)。
+            float stabWeight = Mathf.Clamp01((spd - 18f) / 50f);     // 18m/s以上で徐々に
+            if (stabWeight > 0f)
             {
-                // ---- アーケード安定化(走行中のみ) ----
-                v *= Mathf.Max(0f, 1f - GripAssist * dt);
-                r *= Mathf.Max(0f, 1f - YawDamp * dt);
+                v *= Mathf.Max(0f, 1f - GripAssist * stabWeight * dt);
+                r *= Mathf.Max(0f, 1f - YawDamp * stabWeight * dt);
             }
 
             // ---- 停止保持 ----
