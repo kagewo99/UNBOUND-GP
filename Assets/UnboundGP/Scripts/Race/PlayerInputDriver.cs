@@ -19,10 +19,18 @@ namespace UnboundGP.Race
 
         WheelMapping wheel;
 
+        // シフト操作のラッチ(Update で立て、FixedUpdate 側が Consume で消費する)
+        bool shiftUpLatched, shiftDownLatched, toggleAutoLatched;
+
         void Awake()
         {
             wheel = WheelMapping.Load();
         }
+
+        /// <summary>シフトアップ要求を取り出してクリア(1回分)。</summary>
+        public bool ConsumeShiftUp() { bool v = shiftUpLatched; shiftUpLatched = false; return v; }
+        public bool ConsumeShiftDown() { bool v = shiftDownLatched; shiftDownLatched = false; return v; }
+        public bool ConsumeToggleAuto() { bool v = toggleAutoLatched; toggleAutoLatched = false; return v; }
 
         /// <summary>キャリブレーション直後など、外部から最新のマッピングを反映する。</summary>
         public void SetWheelMapping(WheelMapping mapping) => wheel = mapping;
@@ -52,6 +60,18 @@ namespace UnboundGP.Race
             Throttle = Mathf.Max(kThrottle, wThrottle);
             Brake = Mathf.Max(kBrake, wBrake);
             Steer = Mathf.Abs(wSteer) >= Mathf.Abs(kSteer) ? wSteer : kSteer;
+
+            // ---- シフト操作(キーボード or ホイールのパドル/ボタン) ----
+            // シフトアップ: E / 右Shift / ホイールボタン(右パドル想定)
+            if (Input.GetKeyDown(KeyCode.E) || Input.GetKeyDown(KeyCode.RightShift)
+                || Input.GetKeyDown(KeyCode.JoystickButton5) || Input.GetKeyDown(KeyCode.JoystickButton1))
+                shiftUpLatched = true;
+            // シフトダウン: Q / 左Shift / ホイールボタン(左パドル想定)
+            if (Input.GetKeyDown(KeyCode.Q) || Input.GetKeyDown(KeyCode.LeftShift)
+                || Input.GetKeyDown(KeyCode.JoystickButton4) || Input.GetKeyDown(KeyCode.JoystickButton0))
+                shiftDownLatched = true;
+            // オート/マニュアル切替: T
+            if (Input.GetKeyDown(KeyCode.T)) toggleAutoLatched = true;
         }
     }
 }

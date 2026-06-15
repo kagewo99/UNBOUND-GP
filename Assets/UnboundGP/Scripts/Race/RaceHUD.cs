@@ -16,7 +16,8 @@ namespace UnboundGP.Race
     {
         Text modeText, lapText, timeText, speedText, gText, humanRatioText;
         Text countdownText, standingsText, hintText, blackoutText;
-        Image gBar, consciousnessBar, vignette;
+        Text gearText, rpmText, shiftModeText;
+        Image gBar, consciousnessBar, vignette, rpmBar;
 
         public static RaceHUD Create()
         {
@@ -89,6 +90,24 @@ namespace UnboundGP.Race
             consciousnessBar = UiFactory.CreateBar(telRt, new Color(0.3f, 0.85f, 0.4f), "ConsciousnessBar");
             UiFactory.SetAnchors((RectTransform)consciousnessBar.transform.parent, new Vector2(0.2f, 0.06f), new Vector2(1f, 0.2f), Vector2.zero, new Vector2(-14f, 0f));
 
+            // ---- 右下(テレメトリの左隣): ギア & タコメータ ----
+            var gearRt = UiFactory.CreatePanel(root, new Color(0f, 0f, 0f, 0.55f), "GearRpm");
+            UiFactory.SetAnchors(gearRt, new Vector2(1f, 0f), new Vector2(1f, 0f));
+            gearRt.pivot = new Vector2(1f, 0f);
+            gearRt.anchoredPosition = new Vector2(-448f, 16f);
+            gearRt.sizeDelta = new Vector2(220f, 190f);
+
+            var gearLabel = UiFactory.CreateText(gearRt, "GEAR", 16, TextAnchor.UpperCenter, new Color(1f, 1f, 1f, 0.6f));
+            UiFactory.SetAnchors((RectTransform)gearLabel.transform, new Vector2(0f, 0.82f), new Vector2(1f, 1f), new Vector2(0f, -6f), Vector2.zero);
+            gearText = UiFactory.CreateText(gearRt, "1", 64, TextAnchor.MiddleCenter, Color.white, true);
+            UiFactory.SetAnchors((RectTransform)gearText.transform, new Vector2(0f, 0.34f), new Vector2(1f, 0.85f));
+            shiftModeText = UiFactory.CreateText(gearRt, "AUTO", 14, TextAnchor.MiddleCenter, new Color(0.6f, 0.8f, 1f));
+            UiFactory.SetAnchors((RectTransform)shiftModeText.transform, new Vector2(0f, 0.28f), new Vector2(1f, 0.4f));
+            rpmText = UiFactory.CreateText(gearRt, "0 RPM", 16, TextAnchor.MiddleRight, Color.white);
+            UiFactory.SetAnchors((RectTransform)rpmText.transform, new Vector2(0f, 0.16f), new Vector2(1f, 0.28f), new Vector2(8f, 0f), new Vector2(-12f, 0f));
+            rpmBar = UiFactory.CreateBar(gearRt, new Color(0.3f, 0.85f, 0.4f), "RpmBar");
+            UiFactory.SetAnchors((RectTransform)rpmBar.transform.parent, new Vector2(0f, 0.04f), new Vector2(1f, 0.14f), new Vector2(10f, 0f), new Vector2(-10f, 0f));
+
             // ---- 中央: カウントダウン / BLACKOUT ----
             countdownText = UiFactory.CreateText(root, "", 110, TextAnchor.MiddleCenter, Color.white, true);
             UiFactory.SetAnchors((RectTransform)countdownText.transform, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f));
@@ -111,6 +130,32 @@ namespace UnboundGP.Race
         public void SetHint(string hint) => hintText.text = hint;
         public void SetCountdown(string s) => countdownText.text = s;
         public void SetStandings(string s) => standingsText.text = s;
+
+        /// <summary>ギア・回転数(タコメータ)を更新する。</summary>
+        public void SetGearRPM(string gearLabel, float rpm, float redline, float maxRpm, bool isCVT, bool autoShift)
+        {
+            gearText.text = gearLabel;
+            if (isCVT)
+            {
+                gearText.fontSize = 40;
+                rpmText.text = "無段変速";
+                shiftModeText.text = "CVT";
+                rpmBar.fillAmount = Mathf.Clamp01(rpm / maxRpm);
+                rpmBar.color = new Color(0.4f, 0.7f, 1f);
+            }
+            else
+            {
+                gearText.fontSize = 64;
+                rpmText.text = $"{rpm:0} RPM";
+                shiftModeText.text = autoShift ? "AUTO" : "MANUAL";
+                float t = Mathf.Clamp01(rpm / maxRpm);
+                rpmBar.fillAmount = t;
+                // レッドライン手前から赤へ
+                rpmBar.color = rpm >= redline
+                    ? new Color(0.95f, 0.2f, 0.15f)
+                    : Color.Lerp(new Color(0.3f, 0.85f, 0.4f), new Color(0.95f, 0.7f, 0.1f), Mathf.Clamp01((rpm / redline - 0.6f) / 0.4f));
+            }
+        }
 
         public void SetLap(string lap, string time)
         {

@@ -69,7 +69,8 @@ namespace UnboundGP.Race
         /// 物理を1ステップ進める。
         /// steerInput は右が正(+1)。throttle/brake は 0..1。
         /// </summary>
-        public Output Step(float dt, float throttle, float brake, float steerInput, MachineStats stats)
+        /// <param name="driveTorque">変速機からの駆動トルク係数(1=基準)。省略時は1で従来通り。</param>
+        public Output Step(float dt, float throttle, float brake, float steerInput, MachineStats stats, float driveTorque = 1f)
         {
             float m = Mathf.Max(stats.weightKg, 1f);
             float u = forwardSpeed;
@@ -111,7 +112,8 @@ namespace UnboundGP.Race
             if (throttle >= 0f)
             {
                 float falloff = Mathf.Max(0f, 1f - Mathf.Pow(Mathf.Clamp01(absU / topMs), 2f));
-                Fdrive = throttle * m * stats.acceleration * falloff;            // リア駆動(前進)
+                // 変速機の駆動トルク係数を掛ける(ギア/RPMの質感。CVT/省略時は約1)
+                Fdrive = throttle * m * stats.acceleration * falloff * driveTorque;
             }
             else
             {

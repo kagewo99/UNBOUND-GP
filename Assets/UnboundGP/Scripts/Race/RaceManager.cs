@@ -76,7 +76,7 @@ namespace UnboundGP.Race
             hud = RaceHUD.Create();
             hud.SetMode($"{modeData.title} ── {ctx.Track.trackName}");
             hud.SetHint(modeData.playerDrives
-                ? "一人称  W/↑:アクセル  S/↓:ブレーキ(停止後は後退)  A/D:操舵  R:コース復帰  F1:ハンドル設定"
+                ? "W/↑:アクセル S/↓:ブレーキ(停止後は後退) A/D:操舵  E/Q:シフトUP/DOWN T:AT/MT切替  R:復帰 F1:ハンドル設定"
                 : "観戦モード   Tab: カメラ切替   ※あなたのマシンはAIが運転しています");
 
             // カメラセットアップ:Human GP は一人称(人体のGを自分の目で受ける)、
@@ -117,6 +117,8 @@ namespace UnboundGP.Race
         {
             var playerStats = ctx.CurrentMachineStats();
             int total = 1 + modeData.aiOpponentCount;
+            // CVT(無段変速)を装備しているか。装備時は全車シフト無し。
+            bool hasCVT = ctx.Save.equippedTechIds.Contains("cvt");
 
             for (int i = 0; i < total; i++)
             {
@@ -154,7 +156,7 @@ namespace UnboundGP.Race
                 }
 
                 e.car = CarFactory.Create(e.name, TeamColors[i % TeamColors.Length],
-                    stats, pos, rot, profile, playerControlled, path);
+                    stats, pos, rot, profile, playerControlled, path, hasCVT);
                 e.condition = e.car.Condition;
                 e.car.InputEnabled = false;
                 e.nearestIdx = path.NearestIndex(e.car.transform.position);
@@ -332,6 +334,9 @@ namespace UnboundGP.Race
                 watch.condition != null ? watch.condition.BlackoutMeter : 0f,
                 watch.condition != null && watch.condition.IsBlackedOut,
                 humanMode);
+
+            var gb = watch.car.Gearbox;
+            hud.SetGearRPM(gb.GearLabel, gb.Rpm, Transmission.RedlineRPM, Transmission.MaxRPM, gb.IsCVT, gb.AutoShift);
 
             float t = phase == Phase.Countdown ? 0f : Time.time - watch.lapStartTime;
             hud.SetLap(

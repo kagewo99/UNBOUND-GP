@@ -20,6 +20,7 @@ namespace UnboundGP.Race
         public MachineStats Stats { get; private set; }
         public DriverCondition Condition { get; private set; }
         public VehicleModel Model { get; private set; } = new VehicleModel();
+        public Transmission Gearbox { get; private set; } = new Transmission();
 
         /// <summary>カウントダウン中は false。RaceManager が制御する。</summary>
         public bool InputEnabled = false;
@@ -48,11 +49,12 @@ namespace UnboundGP.Race
         bool grounded;
         Vector3 prevVelocity;
 
-        public void Setup(MachineStats stats, IDriverInput driverInput, DriverCondition condition)
+        public void Setup(MachineStats stats, IDriverInput driverInput, DriverCondition condition, bool hasCVT = false)
         {
             Stats = stats;
             input = driverInput;
             Condition = condition;
+            Gearbox.Configure(stats.EffectiveTopSpeedMs, hasCVT);
 
             rb = GetComponent<Rigidbody>();
             rb.mass = stats.weightKg;
@@ -135,10 +137,24 @@ namespace UnboundGP.Race
                 steer = 0f;
             }
 
+            // ---- 変速機(RPM/ギア/トルク) ----
+            // プレイヤーのシフト操作(マニュアル)。AI/CVTはオート。
+            if (input is PlayerInputDriver pid)
+            {
+                if (pid.ConsumeShiftUp()) { Gearbox.AutoShift = false; Gearbox.ShiftUp(); }
+                if (pid.ConsumeShiftDown()) { Gearbox.AutoShift = false; Gearbox.ShiftDown(); }
+                if (pid.ConsumeToggleAuto()) Gearbox.AutoShift = !Gearbox.AutoShift;
+            }
+            float fwdThrottle = Mathf.Max(0f, throttle);
+            float driveTorque = Gearbox.Tick(u, fwdThrottle, dt);
+            // エンジンブレーキ:アクセルオフで軽く減速(リフトの手応え)。後退中は効かせない。
+            if (throttle >= 0f)
+                brake = Mathf.Max(brake, Gearbox.EngineBrake(fwdThrottle));
+
             if (grounded)
             {
                 // ---- 物理1ステップ ----
-                var outp = Model.Step(dt, throttle, brake, steer, Stats);
+                var outp = Model.Step(dt, throttle, brake, steer, Stats, driveTorque);
 
                 // ---- モデル状態 → Rigidbody へ書き戻し ----
                 Vector3 planar = fwd * Model.forwardSpeed + right * (-Model.lateralSpeed);
