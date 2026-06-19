@@ -37,6 +37,10 @@ namespace UnboundGP.Race
         public float LongitudinalGSigned { get; private set; }
         /// <summary>車体スリップ角[deg]。HUD やエフェクト(タイヤスモーク)のフック用。</summary>
         public float SlipAngleDeg { get; private set; }
+        /// <summary>実際に使われた操舵入力(-1..1)。前輪の見た目の切れ角に使う。</summary>
+        public float SteerInput { get; private set; }
+        /// <summary>リアの縦グリップ使用率 0..1。タイヤスモーク/スキール音のトリガに使う。</summary>
+        public float RearGripUsage { get; private set; }
 
         // 衝突などの瞬間的なGがゲームを壊さないよう、報告するGの上限。
         const float MaxReportG = 50f;
@@ -123,6 +127,7 @@ namespace UnboundGP.Race
 
             // 後退中はステアの向きが逆に感じるため反転(前向き視点でも直感に合わせる)
             if (u < -0.3f || Gearbox.Gear == Transmission.ReverseGear) steer = -steer;
+            SteerInput = steer;   // 見た目の前輪切れ角用
 
             // ギアの駆動方向に応じて符号付きスロットルを作る(R=後退, N=駆動なし, 前進=前へ)
             int driveDir = Gearbox.DriveDirection;
@@ -149,6 +154,7 @@ namespace UnboundGP.Race
                 rb.AddForce(Vector3.down * (Stats.weightKg * 9.81f * stickG));
 
                 SlipAngleDeg = outp.slipAngleRad * Mathf.Rad2Deg;
+                RearGripUsage = outp.rearGripUsage;
             }
 
             Condition?.ReportG(CurrentG, dt);
