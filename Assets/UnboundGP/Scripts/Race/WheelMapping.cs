@@ -80,12 +80,17 @@ namespace UnboundGP.Race
         /// <summary>ブレーキ 0〜1。未割り当てなら 0。</summary>
         public float ReadBrake() => ReadPedal(brakeAxis, brakeRest, brakeFull);
 
+        const float PedalDeadzone = 0.08f;
+
         static float ReadPedal(int axis, float rest, float full)
         {
             if (axis <= 0) return 0f;
             float raw = ReadRawAxis(axis);
             if (Mathf.Abs(full - rest) < 0.05f) return 0f; // 校正不足
-            return Mathf.Clamp01((raw - rest) / (full - rest));
+            float v = Mathf.Clamp01((raw - rest) / (full - rest));
+            // 離した付近の遊び(較正ズレ由来の“幽霊入力”)を除去して再スケール
+            if (v < PedalDeadzone) return 0f;
+            return (v - PedalDeadzone) / (1f - PedalDeadzone);
         }
     }
 }

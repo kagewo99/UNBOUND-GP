@@ -41,6 +41,15 @@ namespace UnboundGP.Race
         /// <summary>キャリブレーション直後など、外部から最新のマッピングを反映する。</summary>
         public void SetWheelMapping(WheelMapping mapping) => wheel = mapping;
 
+        /// <summary>ジョイスティック/ホイールが1つでも接続されているか。</summary>
+        static bool AnyJoystickConnected()
+        {
+            var names = Input.GetJoystickNames();
+            for (int i = 0; i < names.Length; i++)
+                if (!string.IsNullOrEmpty(names[i])) return true;
+            return false;
+        }
+
         void Update()
         {
             float dt = Mathf.Max(Time.deltaTime, 1e-4f);
@@ -60,9 +69,11 @@ namespace UnboundGP.Race
             kSteerSmoothed = Mathf.MoveTowards(kSteerSmoothed, steerTarget, rate * dt);
             float kSteer = kSteerSmoothed;
 
-            // ---- ホイール(キャリブレーション済みの割り当て軸のみ)----
+            // ---- ホイール(接続されていて、かつ割り当て済みのときだけ読む)----
+            // 未接続だと軸が0を返し、ペダル較正(離す=-1等)次第で ReadBrake が 0.5 等の
+            // “幽霊入力”を返してしまう。接続判定で遮断し、キーボード操作を巻き込ませない。
             float wThrottle = 0f, wBrake = 0f, wSteer = 0f;
-            if (wheel != null)
+            if (wheel != null && AnyJoystickConnected())
             {
                 wThrottle = wheel.ReadAccel();
                 wBrake = wheel.ReadBrake();
