@@ -5,11 +5,12 @@ namespace UnboundGP.Race
     /// <summary>
     /// プレイヤー入力。キーボードとレーシングホイールの両方を読み、併用できるよう統合する。
     ///
-    /// - キーボード: WASD/矢印 + Space(ブレーキ)
-    /// - ホイール: WheelMapping で割り当てた軸(ステア/アクセル/ブレーキ)
+    /// - キーボード: W/S(アクセル/ブレーキ) + A/D・←/→(操舵) + Space(ブレーキ) + E/Q/T(シフト)
+    /// - ホイール:   WheelMapping で割り当てた軸(ステア/アクセル/ブレーキ)
     ///
-    /// ホイールが未割り当て(キャリブレーション前)でもキーボードがそのまま使えるよう、
-    /// 各入力はキーボード値とホイール値の“強い方”を採用する。
+    /// キーボードは Unity の Horizontal/Vertical 軸を使わず“明示キー”で読む。これらの軸は
+    /// 接続中のジョイスティック(ホイール)の軸も合算するため、ホイールのドリフトで
+    /// キーボード操作が汚染・上書きされるのを防ぐ。ホイール未割り当てでもキーボードは常に動く。
     /// </summary>
     public class PlayerInputDriver : MonoBehaviour, IDriverInput
     {
@@ -18,6 +19,11 @@ namespace UnboundGP.Race
         public float Steer { get; private set; }
 
         WheelMapping wheel;
+
+        // キーボード操舵の平滑化(明示キーは0/1なので、アナログ的なランプと自動センタリングを自前で持つ)
+        float kSteerSmoothed;
+        const float SteerTurnRate = 2.8f;    // フルロックまで約0.36秒
+        const float SteerCenterRate = 4.5f;  // 手を離したときの戻りは速め
 
         // シフト操作のラッチ(Update で立て、FixedUpdate 側が Consume で消費する)
         bool shiftUpLatched, shiftDownLatched, toggleAutoLatched;
@@ -37,17 +43,24 @@ namespace UnboundGP.Race
 
         void Update()
         {
-            // ---- キーボード ----
-            // アクセルとブレーキを“独立したキー”で読む。同じ軸(Vertical)だと W+S が打ち消し合い、
-            // 同時踏みが効かず・片方を離した瞬間に他方が満タンになってスピンする原因になる。
+            float dt = Mathf.Max(Time.deltaTime, 1e-4f);
+
+            // ---- キーボード(すべて明示キー。ジョイスティック軸を一切経由しない)----
             bool up = Input.GetKey(KeyCode.W) || Input.GetKey(KeyCode.UpArrow);
             bool down = Input.GetKey(KeyCode.S) || Input.GetKey(KeyCode.DownArrow);
             float kThrottle = up ? 1f : 0f;
             float kBrake = down ? 1f : 0f;
             if (Input.GetKey(KeyCode.Space)) kBrake = 1f;
-            float kSteer = Input.GetAxis("Horizontal");
 
-            // ---- ホイール ----
+            // 操舵: A/D・←/→ を目標に、ランプで滑らかに寄せる(自動センタリング)
+            float steerTarget = 0f;
+            if (Input.GetKey(KeyCode.A) || Input.GetKey(KeyCode.LeftArrow)) steerTarget -= 1f;
+            if (Input.GetKey(KeyCode.D) || Input.GetKey(KeyCode.RightArrow)) steerTarget += 1f;
+            float rate = Mathf.Approximately(steerTarget, 0f) ? SteerCenterRate : SteerTurnRate;
+            kSteerSmoothed = Mathf.MoveTowards(kSteerSmoothed, steerTarget, rate * dt);
+            float kSteer = kSteerSmoothed;
+
+            // ---- ホイール(キャリブレーション済みの割り当て軸のみ)----
             float wThrottle = 0f, wBrake = 0f, wSteer = 0f;
             if (wheel != null)
             {
@@ -56,10 +69,10 @@ namespace UnboundGP.Race
                 wSteer = wheel.ReadSteer();
             }
 
-            // ---- 統合(強い方を採用。ホイール優先のステアはキーボードより値が大きいとき) ----
+            // ---- 統合(強い方を採用)----
             Throttle = Mathf.Max(kThrottle, wThrottle);
             Brake = Mathf.Max(kBrake, wBrake);
-            Steer = Mathf.Abs(wSteer) >= Mathf.Abs(kSteer) ? wSteer : kSteer;
+            Steer = Mathf.Abs(wSteer) > Mathf.Abs(kSteer) ? wSteer : kSteer;
 
             // ---- シフト操作(キーボード or ホイールのパドル/ボタン) ----
             // シフトアップ: E / 右Shift / ホイールボタン(右パドル想定)
