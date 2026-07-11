@@ -28,9 +28,19 @@ namespace UnboundGP.UI
             panel.sizeDelta = new Vector2(1240f, 880f);
 
             // ---- ヘッダー ----
-            string header = result.mode == GameMode.HumanGP
-                ? "DEBRIEF ── 人間の身体が、最後のレギュレーションだった"
-                : "DEBRIEF ── 制約が消えた世界のレースは、静かだった";
+            string header;
+            switch (result.mode)
+            {
+                case GameMode.MachineGP:
+                    header = "DEBRIEF ── 制約が消えた世界のレースは、静かだった";
+                    break;
+                case GameMode.TimeAttack:
+                    header = "DEBRIEF ── コースと、自分の限界とだけ向き合った";
+                    break;
+                default:
+                    header = "DEBRIEF ── 人間の身体が、最後のレギュレーションだった";
+                    break;
+            }
             var title = UiFactory.CreateText(panel, header, 34, TextAnchor.MiddleLeft, new Color(1f, 0.85f, 0.4f), true);
             UiFactory.SetAnchors((RectTransform)title.transform, new Vector2(0f, 0.9f), new Vector2(1f, 1f), new Vector2(40f, 0f), new Vector2(-40f, -10f));
 
@@ -52,10 +62,20 @@ namespace UnboundGP.UI
             var sb = new StringBuilder();
 
             // ---- リザルト ----
-            sb.AppendLine($"<b>RESULT</b>   あなたのマシン: {Ordinal(r.playerPlace)}位   ベストラップ {LapTimeEstimator.Format(r.playerBestLap)}   獲得 {r.pointsAwarded} RP");
+            if (r.mode == GameMode.TimeAttack)
+            {
+                int laps = r.standingLines != null ? r.standingLines.Length : 0;
+                sb.AppendLine($"<b>RESULT</b>   周回数 {laps}   ベストラップ {LapTimeEstimator.Format(r.playerBestLap)}   獲得 {r.pointsAwarded} RP");
+            }
+            else
+            {
+                sb.AppendLine($"<b>RESULT</b>   あなたのマシン: {Ordinal(r.playerPlace)}位   ベストラップ {LapTimeEstimator.Format(r.playerBestLap)}   獲得 {r.pointsAwarded} RP");
+            }
             if (r.standingLines != null)
             {
-                foreach (var line in r.standingLines) sb.AppendLine("   " + line);
+                // タイムアタックのラップ履歴が長い場合は直近8周に絞る
+                int start = r.mode == GameMode.TimeAttack ? Mathf.Max(0, r.standingLines.Length - 8) : 0;
+                for (int i = start; i < r.standingLines.Length; i++) sb.AppendLine("   " + r.standingLines[i]);
             }
             sb.AppendLine();
 
@@ -63,7 +83,7 @@ namespace UnboundGP.UI
             sb.AppendLine("<b>TELEMETRY ── コクピットの中で起きていたこと</b>");
             sb.AppendLine($"   最大横G: {r.peakG:0.0} G  (人間の持続限界: {MachineStats.HumanSustainedGLimit:0} G)");
             sb.AppendLine($"   人間限界を超えていた時間: {r.timeOverHumanLimit:0.0} 秒");
-            if (r.mode == GameMode.HumanGP)
+            if (r.mode != GameMode.MachineGP)
                 sb.AppendLine($"   ブラックアウト: {r.blackoutCount} 回");
             else
                 sb.AppendLine("   ブラックアウト: 0 回 ── AIに失神はない。恐怖も、ためらいも。");
@@ -80,7 +100,17 @@ namespace UnboundGP.UI
 
             // ---- 動的な気づき ----
             sb.AppendLine("<b>INSIGHT</b>");
-            if (r.mode == GameMode.HumanGP)
+            if (r.mode == GameMode.TimeAttack)
+            {
+                float toTheory = r.playerBestLap > 0f ? r.playerBestLap - r.estHumanLap : -1f;
+                if (r.playerBestLap <= 0f)
+                    sb.AppendLine("   計測ラップが残らなかった。まずは1周、コースと対話することから。");
+                else if (toTheory <= 1.5f)
+                    sb.AppendLine($"   人間理論値との差 {Mathf.Max(toTheory, 0f):0.0} 秒。あなたはこのマシンの“人間に許された速さ”を\n   ほぼ使い切っている。ここから先は、肉体の設計図の外側だ。");
+                else
+                    sb.AppendLine($"   人間理論値まであと {toTheory:0.0} 秒。マシンでもAIでもなく、\n   まだあなた自身の中に縮められる余地がある。");
+            }
+            else if (r.mode == GameMode.HumanGP)
             {
                 if (r.blackoutCount > 0)
                     sb.AppendLine("   マシンはまだ余力を残していた。先に限界が来たのはあなたの身体だった。\n   規制のない世界では、勝つための設計が、人間を壊す設計になっていく。");
@@ -96,9 +126,10 @@ namespace UnboundGP.UI
             sb.AppendLine();
 
             // ---- モード定義側の核心テキスト ----
-            var modeData = r.mode == GameMode.HumanGP
-                ? GameContext.I.HumanGPMode
-                : GameContext.I.MachineGPMode;
+            var ctx = GameContext.I;
+            var modeData = r.mode == GameMode.MachineGP ? ctx.MachineGPMode
+                : r.mode == GameMode.TimeAttack ? ctx.TimeAttackMode
+                : ctx.HumanGPMode;
             sb.AppendLine($"<i>{modeData.debriefInsight}</i>");
 
             return sb.ToString();

@@ -12,5 +12,8 @@ namespace UnboundGP.Core
 
         /// <summary>AIドライバーが搭乗する。人間という制約が消えた世界で、マシンは設計上の限界まで走る。</summary>
         MachineGP,
+
+        /// <summary>ソロのタイムアタック。人間ドライバー・周回無制限・ベストラップだけが記録される。</summary>
+        TimeAttack,
     }
 }

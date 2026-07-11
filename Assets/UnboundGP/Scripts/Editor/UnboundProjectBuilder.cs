@@ -78,6 +78,7 @@ namespace UnboundGP.EditorTools
             CreateIfMissing(DefaultDataFactory.CreateSuzukaTrack, DataDir + "/RealityTrack_Suzuka.asset");
             CreateIfMissing(DefaultDataFactory.CreateHumanGPMode, DataDir + "/Mode_HumanGP.asset");
             CreateIfMissing(DefaultDataFactory.CreateMachineGPMode, DataDir + "/Mode_MachineGP.asset");
+            CreateIfMissing(DefaultDataFactory.CreateTimeAttackMode, DataDir + "/Mode_TimeAttack.asset");
 
             AssetDatabase.SaveAssets();
         }

@@ -143,8 +143,8 @@ namespace UnboundGP.Data
             var t = ScriptableObject.CreateInstance<TrackData>();
             t.name = "RealityTrack_Suzuka";
             t.trackName = "Reality Track 01: SUZUKA UNBOUND";
-            t.description = "立体交差を持つ世界唯一の8の字レイアウトを持つ、あのサーキットへのオマージュ。高速S字と橋越えバックストレートが、無制限マシンの旋回Gを容赦なく引き出す。";
-            t.roadWidth = 20f;
+            t.description = "実測ジオメトリから再現した実寸の鈴鹿(全長5.8km)。S字、デグナー、ヘアピン、スプーン、130R──立体交差を持つ世界唯一の8の字が、無制限マシンの旋回Gを容赦なく引き出す。";
+            t.roadWidth = 18f;
             t.lapCount = 3;
             t.controlPoints = new List<Vector3>(SuzukaTrackDefinition.CreateControlPoints());
             return t;
@@ -164,6 +164,20 @@ namespace UnboundGP.Data
             m.playerDrives = true;
             m.aiOpponentCount = 3;
             m.debriefInsight = "現実のF1がグラウンドエフェクトやファンカーを禁止したのは、速さの追求が人間の限界と安全を置き去りにしたからだ。レギュレーションとは、人間がレースの主役であり続けるための約束だった。";
+            return m;
+        }
+
+        public static RaceModeData CreateTimeAttackMode()
+        {
+            var m = ScriptableObject.CreateInstance<RaceModeData>();
+            m.name = "Mode_TimeAttack";
+            m.mode = GameMode.TimeAttack;
+            m.title = "TIME ATTACK";
+            m.tagline = "コースと、自分の限界とだけ向き合う。";
+            m.description = "ソロ走行。ライバルはいない。周回は無制限で、あなたのベストラップだけが記録される。マシンの理論値と自分のタイムの差が、そのまま“人間である代償”として突きつけられる。";
+            m.playerDrives = true;
+            m.aiOpponentCount = 0;
+            m.debriefInsight = "誰もいないコースで競う相手は、理論ラップ──つまり“人間でなければ出せたはずのタイム”だけだ。その差を縮める努力こそ、ドライバーという存在の証明かもしれない。";
             return m;
         }
 

@@ -18,35 +18,77 @@ namespace UnboundGP.Track
             path.Init(data, 1000);
 
             // レース路面(roadWidth)の外側にランオフ(芝)を設け、その奥に壁を置く。
-            // こうすると“少しはみ出しただけで壁”ではなく、枠の外に逃げ場(ランオフ)がある。
-            float runoff = RunoffWidthPerSide;
-            float totalWidth = data.roadWidth + runoff * 2f;
+            // “少しはみ出しただけで壁”ではなく、枠の外に逃げ場(ランオフ)がある構成。
+            // 実寸コースでは隣接セクション(ヘアピンの両脚など)が31m程度まで近づくため、
+            // ランオフ幅はサンプルごとに可変とし、狭隘部では自動的に絞って壁の食い込みを防ぐ。
+            float[] runoff = ComputeRunoffWidths(path, data.roadWidth);
 
             BuildGround(root.transform);
-            // 1) 走行可能面(全幅・芝色)= 当たり判定はこれ
-            BuildSurface(root.transform, path, totalWidth, new Color(0.20f, 0.42f, 0.20f), 0f, true, "Runoff");
+            // 1) 走行可能面(路面+ランオフ・芝色)= 当たり判定はこれ
+            BuildSurface(root.transform, path, i => data.roadWidth * 0.5f + runoff[i],
+                new Color(0.20f, 0.42f, 0.20f), 0f, true, "Runoff");
             // 2) レーシング路面(アスファルト)= 見た目。数cm上に重ねる(当たりは芝側)
-            BuildSurface(root.transform, path, data.roadWidth, new Color(0.16f, 0.16f, 0.18f), 0.03f, false, "Road");
+            BuildSurface(root.transform, path, i => data.roadWidth * 0.5f,
+                new Color(0.16f, 0.16f, 0.18f), 0.03f, false, "Road");
             // 3) 縁石ライン(枠の境界)
             BuildEdgeLines(root.transform, path, data.roadWidth);
-            // 4) 壁はランオフの外縁(=路面からだいぶ奥)
-            BuildWalls(root.transform, path, totalWidth * 0.5f + 0.8f);
+            // 4) 壁はランオフの外縁
+            BuildWalls(root.transform, path, i => data.roadWidth * 0.5f + runoff[i] + 0.6f);
             BuildStartLine(root.transform, path, data.roadWidth);
 
             return path;
         }
 
-        /// <summary>レース路面の片側ランオフ幅 [m]。</summary>
+        /// <summary>レース路面の片側ランオフ幅の上限 [m]。狭隘部ではここから自動的に絞られる。</summary>
         public const float RunoffWidthPerSide = 9f;
 
-        // ----------------------------------------------------------------
-        // 路面(汎用サーフェス)
-        // ----------------------------------------------------------------
-        static void BuildSurface(Transform parent, TrackPath path, float width, Color color,
-            float yOffset, bool addCollider, string name)
+        /// <summary>
+        /// サンプルごとのランオフ幅を計算する。
+        /// 弧長で200m以上離れた他セクションへの最短3D距離から「使ってよい横幅」を割り出す。
+        /// 3D距離なので立体交差(縦に9m離れている)も正しく扱える。
+        /// </summary>
+        static float[] ComputeRunoffWidths(TrackPath path, float roadWidth)
         {
             int n = path.SampleCount;
-            float hw = width * 0.5f;
+            var result = new float[n];
+            float avgSpacing = path.TotalLength / n;
+            int skip = Mathf.Max(8, Mathf.CeilToInt(200f / avgSpacing)); // 弧長200mぶんのサンプル数
+
+            for (int i = 0; i < n; i++)
+            {
+                float minSq = float.MaxValue;
+                for (int j = 0; j < n; j++)
+                {
+                    int ring = Mathf.Abs(i - j);
+                    ring = Mathf.Min(ring, n - ring);
+                    if (ring < skip) continue;
+                    float sq = (path.Points[i] - path.Points[j]).sqrMagnitude;
+                    if (sq < minSq) minSq = sq;
+                }
+                float minDist = Mathf.Sqrt(minSq);
+                // 2本のコリドーで距離を分け合う: 片側 = (間隔 - 路面幅)/2 - 壁マージン
+                result[i] = Mathf.Clamp((minDist - roadWidth) * 0.5f - 1.0f, 1.2f, RunoffWidthPerSide);
+            }
+
+            // 移動平均でならし、壁のギザつきを防ぐ
+            var smooth = new float[n];
+            const int w = 5;
+            for (int i = 0; i < n; i++)
+            {
+                float sum = 0f;
+                for (int o = -w; o <= w; o++) sum += result[((i + o) % n + n) % n];
+                smooth[i] = sum / (2 * w + 1);
+            }
+            return smooth;
+        }
+
+        // ----------------------------------------------------------------
+        // 路面(汎用サーフェス, 片側幅はサンプルごとに可変)
+        // ----------------------------------------------------------------
+        static void BuildSurface(Transform parent, TrackPath path, System.Func<int, float> halfWidth,
+            Color color, float yOffset, bool addCollider, string name)
+        {
+            int n = path.SampleCount;
 
             var verts = new Vector3[n * 2];
             var tris = new int[n * 6];
@@ -56,6 +98,7 @@ namespace UnboundGP.Track
                 Vector3 fwd = path.Forwards[i];
                 Vector3 right = Vector3.Cross(Vector3.up, fwd).normalized;
                 Vector3 c = path.Points[i] + Vector3.up * yOffset;
+                float hw = halfWidth(i);
                 verts[i * 2] = c - right * hw;     // 左端
                 verts[i * 2 + 1] = c + right * hw; // 右端
             }
@@ -132,7 +175,7 @@ namespace UnboundGP.Track
         // ----------------------------------------------------------------
         // ウォール: 見た目はメッシュ、当たりは BoxCollider の列で堅牢にする
         // ----------------------------------------------------------------
-        static void BuildWalls(Transform parent, TrackPath path, float offset)
+        static void BuildWalls(Transform parent, TrackPath path, System.Func<int, float> offsetAt)
         {
             // 背を高く(3m)、路面より 0.8m 下から立ち上げる。
             // こうすると立体交差の標高変化部でも壁と路面の間に隙間ができず、車が下へ抜けない。
@@ -154,8 +197,8 @@ namespace UnboundGP.Track
                     Vector3 rightA = Vector3.Cross(Vector3.up, path.Forwards[i]).normalized;
                     Vector3 rightB = Vector3.Cross(Vector3.up, path.Forwards[next]).normalized;
 
-                    Vector3 a = path.Points[i] + rightA * (offset * side);
-                    Vector3 b = path.Points[next] + rightB * (offset * side);
+                    Vector3 a = path.Points[i] + rightA * (offsetAt(i) * side);
+                    Vector3 b = path.Points[next] + rightB * (offsetAt(next) * side);
                     // 中心を持ち上げる量 = 高さ/2 − 食い込み。底が路面より rootBelow だけ下になる。
                     Vector3 center = (a + b) * 0.5f + Vector3.up * (wallHeight * 0.5f - rootBelow);
                     Vector3 dir = b - a;

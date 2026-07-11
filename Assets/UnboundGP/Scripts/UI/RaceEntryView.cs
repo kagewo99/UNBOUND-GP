@@ -7,13 +7,13 @@ using UnityEngine.UI;
 namespace UnboundGP.UI
 {
     /// <summary>
-    /// 出走タブ。Human GP / Machine GP を“同じマシンに対する2つの問い”として並べる。
-    /// どちらを選んでも走るのは同じ設計のマシン。違うのはコクピットの中身だけ。
+    /// 出走タブ。Human GP / Machine GP / Time Attack を“同じマシンに対する3つの問い”として並べる。
+    /// どれを選んでも走るのは同じ設計のマシン。違うのはコクピットの中身と、隣に誰がいるかだけ。
     /// </summary>
     public class RaceEntryView : MonoBehaviour
     {
         GameContext ctx;
-        Text humanCardText, machineCardText, trackText;
+        Text humanCardText, machineCardText, taCardText, trackText;
 
         public void Init(GameContext context)
         {
@@ -35,23 +35,26 @@ namespace UnboundGP.UI
             wbRt.anchoredPosition = new Vector2(-16f, 0f);
             wbRt.sizeDelta = new Vector2(300f, 56f);
 
-            // ---- Human GP カード ----
-            BuildCard(true, new Vector2(0.05f, 0.06f), new Vector2(0.48f, 0.74f), out humanCardText,
-                "HUMAN GP に出走する", new Color(0.75f, 0.25f, 0.15f),
+            // ---- 3モードのカード(横並び) ----
+            BuildCard("HumanCard", new Vector2(0.03f, 0.06f), new Vector2(0.34f, 0.74f), out humanCardText,
+                "HUMAN GP に出走", new Color(0.75f, 0.25f, 0.15f),
                 () => StartRace(GameMode.HumanGP));
 
-            // ---- Machine GP カード ----
-            BuildCard(false, new Vector2(0.52f, 0.06f), new Vector2(0.95f, 0.74f), out machineCardText,
-                "MACHINE GP を観戦する", new Color(0.2f, 0.4f, 0.75f),
+            BuildCard("MachineCard", new Vector2(0.36f, 0.06f), new Vector2(0.67f, 0.74f), out machineCardText,
+                "MACHINE GP を観戦", new Color(0.2f, 0.4f, 0.75f),
                 () => StartRace(GameMode.MachineGP));
+
+            BuildCard("TimeAttackCard", new Vector2(0.69f, 0.06f), new Vector2(0.97f, 0.74f), out taCardText,
+                "TIME ATTACK (ソロ)", new Color(0.25f, 0.55f, 0.35f),
+                () => StartRace(GameMode.TimeAttack));
 
             Rebuild();
         }
 
-        void BuildCard(bool human, Vector2 min, Vector2 max, out Text bodyText,
+        void BuildCard(string name, Vector2 min, Vector2 max, out Text bodyText,
             string buttonLabel, Color buttonColor, UnityEngine.Events.UnityAction onStart)
         {
-            var card = UiFactory.CreatePanel(transform, new Color(0.12f, 0.13f, 0.19f, 0.97f), human ? "HumanCard" : "MachineCard");
+            var card = UiFactory.CreatePanel(transform, new Color(0.12f, 0.13f, 0.19f, 0.97f), name);
             UiFactory.SetAnchors(card, min, max);
 
             bodyText = UiFactory.CreateText(card, "", 19, TextAnchor.UpperLeft);
@@ -90,6 +93,14 @@ namespace UnboundGP.UI
                 $"{machine.description}\n\n" +
                 $"<b>あなたのマシンの理論ラップ: {LapTimeEstimator.Format(machineLap)}</b>\n" +
                 $"<color=#aaaaaa>同じマシンで人間より {Mathf.Max(humanLap - machineLap, 0f):0.0} 秒/周 速い。その理由を見に行こう。</color>";
+
+            var ta = ctx.TimeAttackMode;
+            taCardText.text =
+                $"<b><size=30>{ta.title}</size></b>\n" +
+                $"<color=#7be07b>{ta.tagline}</color>\n\n" +
+                $"{ta.description}\n\n" +
+                $"<b>目標(人間理論値): {LapTimeEstimator.Format(humanLap)}</b>\n" +
+                $"<color=#aaaaaa>周回無制限。Esc でいつでも終了してデブリーフへ。</color>";
         }
 
         void StartRace(GameMode mode)

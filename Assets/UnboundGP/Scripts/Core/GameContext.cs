@@ -38,13 +38,24 @@ namespace UnboundGP.Core
         public TrackData Track { get; private set; }
         public RaceModeData HumanGPMode { get; private set; }
         public RaceModeData MachineGPMode { get; private set; }
+        public RaceModeData TimeAttackMode { get; private set; }
         public SaveData Save { get; private set; }
 
         /// <summary>ガレージで選択され、Race シーンが参照するモード。</summary>
         public GameMode SelectedMode = GameMode.HumanGP;
 
         public RaceModeData SelectedModeData
-            => SelectedMode == GameMode.HumanGP ? HumanGPMode : MachineGPMode;
+        {
+            get
+            {
+                switch (SelectedMode)
+                {
+                    case GameMode.MachineGP: return MachineGPMode;
+                    case GameMode.TimeAttack: return TimeAttackMode;
+                    default: return HumanGPMode;
+                }
+            }
+        }
 
         /// <summary>研究/装備が変化したときに UI が購読するイベント。</summary>
         public event Action StateChanged;
@@ -58,6 +69,7 @@ namespace UnboundGP.Core
             Track = LoadOr("UnboundGP/RealityTrack_Suzuka", DefaultDataFactory.CreateSuzukaTrack);
             HumanGPMode = LoadOr("UnboundGP/Mode_HumanGP", DefaultDataFactory.CreateHumanGPMode);
             MachineGPMode = LoadOr("UnboundGP/Mode_MachineGP", DefaultDataFactory.CreateMachineGPMode);
+            TimeAttackMode = LoadOr("UnboundGP/Mode_TimeAttack", DefaultDataFactory.CreateTimeAttackMode);
 
             LoadSave();
 

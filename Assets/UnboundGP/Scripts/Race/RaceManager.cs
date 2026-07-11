@@ -64,6 +64,12 @@ namespace UnboundGP.Race
         int finishCounter;
         bool debriefShown;
 
+        /// <summary>タイムアタック(ソロ・周回無制限)か。</summary>
+        bool IsTimeAttack => ctx.SelectedMode == GameMode.TimeAttack;
+
+        /// <summary>タイムアタックのラップ履歴(新しい順に表示するため追記式)。</summary>
+        readonly List<float> taLaps = new List<float>();
+
         void Start()
         {
             ctx = GameContext.I;
@@ -75,14 +81,16 @@ namespace UnboundGP.Race
 
             hud = RaceHUD.Create();
             hud.SetMode($"{modeData.title} ── {ctx.Track.trackName}");
+            string driveHint = "W/↑:アクセル S/↓:ブレーキ A/D:操舵  E:シフトUP Q:シフトDOWN(低速でN→R) T:AT/MT  R:コース復帰 F1:ハンドル設定";
+            if (IsTimeAttack) driveHint += "  Esc:走行終了";
             hud.SetHint(modeData.playerDrives
-                ? "W/↑:アクセル S/↓:ブレーキ A/D:操舵  E:シフトUP Q:シフトDOWN(低速でN→R) T:AT/MT  R:コース復帰 F1:ハンドル設定"
+                ? driveHint
                 : "観戦モード   Tab: カメラ切替   ※あなたのマシンはAIが運転しています");
 
-            // カメラセットアップ:Human GP は一人称(人体のGを自分の目で受ける)、
+            // カメラセットアップ:自分で運転するモードは一人称(人体のGを自分の目で受ける)、
             // Machine GP は三人称(人間不在のレースを外から眺める)。視点の対比でテーマを語る。
             var cam = Camera.main;
-            if (ctx.SelectedMode == GameMode.HumanGP)
+            if (modeData.playerDrives)
                 raceCam = cam.gameObject.AddComponent<CockpitCamera>();
             else
                 raceCam = cam.gameObject.AddComponent<ChaseCamera>();
@@ -139,10 +147,11 @@ namespace UnboundGP.Race
                 {
                     stats = playerStats;
                     playerControlled = modeData.playerDrives;
-                    profile = modeData.mode == GameMode.HumanGP
+                    // Machine GP 以外(Human GP / Time Attack)は人間が乗る
+                    profile = modeData.mode != GameMode.MachineGP
                         ? DriverProfile.Human("YOU")
                         : DriverProfile.Machine("UNIT-00 (あなたの設計)");
-                    e.name = modeData.mode == GameMode.HumanGP ? "YOU" : "UNIT-00 ★あなたの設計";
+                    e.name = modeData.mode != GameMode.MachineGP ? "YOU" : "UNIT-00 ★あなたの設計";
                 }
                 else
                 {
@@ -195,7 +204,7 @@ namespace UnboundGP.Race
         /// <summary>F1 でハンドル設定(キャリブレーション)を開く。Human GP のみ。</summary>
         void HandleCalibrationToggle()
         {
-            if (ctx.SelectedMode != GameMode.HumanGP) return;
+            if (!ctx.SelectedModeData.playerDrives) return;
             if (!Input.GetKeyDown(KeyCode.F1)) return;
             if (calibration == null)
             {
@@ -258,6 +267,15 @@ namespace UnboundGP.Race
                 Invoke(nameof(ShowDebrief), 1.6f);
             }
 
+            // タイムアタック: Esc でセッション終了 → デブリーフ
+            if (IsTimeAttack && !debriefShown && Input.GetKeyDown(KeyCode.Escape))
+            {
+                debriefShown = true;
+                phase = Phase.Finished;
+                playerEntrant.place = 1;
+                ShowDebrief();
+            }
+
             // 手動リセット
             if (ctx.SelectedModeData.playerDrives && Input.GetKeyDown(KeyCode.R))
             {
@@ -280,6 +298,13 @@ namespace UnboundGP.Race
             if (lapTime < e.bestLap) e.bestLap = lapTime;
             e.lapStartTime = now;
             e.lap++;
+
+            if (IsTimeAttack)
+            {
+                // 周回無制限。ラップ履歴だけ積む(フィニッシュしない)
+                if (e.isPlayerMachine) taLaps.Add(lapTime);
+                return;
+            }
 
             if (e.lap > ctx.Track.lapCount && !e.finished)
             {
@@ -326,7 +351,7 @@ namespace UnboundGP.Race
             if (hud == null) return;
 
             var watch = entrants[Mathf.Clamp(watchIndex, 0, entrants.Count - 1)];
-            bool humanMode = ctx.SelectedMode == GameMode.HumanGP;
+            bool humanMode = ctx.SelectedMode != GameMode.MachineGP;
 
             hud.SetTelemetry(
                 watch.car.CurrentSpeedKmh,
@@ -340,8 +365,26 @@ namespace UnboundGP.Race
 
             float t = phase == Phase.Countdown ? 0f : Time.time - watch.lapStartTime;
             hud.SetLap(
-                $"LAP {Mathf.Clamp(watch.lap, 1, ctx.Track.lapCount)}/{ctx.Track.lapCount}",
+                IsTimeAttack
+                    ? $"LAP {Mathf.Max(watch.lap, 1)}"
+                    : $"LAP {Mathf.Clamp(watch.lap, 1, ctx.Track.lapCount)}/{ctx.Track.lapCount}",
                 LapTimeEstimator.Format(t));
+
+            if (IsTimeAttack)
+            {
+                // タイムアタック: 順位表の代わりにラップボード(ベスト+直近履歴)
+                var tb = new System.Text.StringBuilder();
+                string best = playerEntrant.bestLap < float.MaxValue
+                    ? LapTimeEstimator.Format(playerEntrant.bestLap) : "-:--.---";
+                tb.AppendLine($"BEST  {best}");
+                for (int i = taLaps.Count - 1; i >= Mathf.Max(0, taLaps.Count - 5); i--)
+                {
+                    string mark = Mathf.Approximately(taLaps[i], playerEntrant.bestLap) ? " *" : "";
+                    tb.AppendLine($"LAP{i + 1,2}  {LapTimeEstimator.Format(taLaps[i])}{mark}");
+                }
+                hud.SetStandings(tb.ToString());
+                return;
+            }
 
             // 順位表 (総走行距離でソート)
             var sorted = new List<Entrant>(entrants);
@@ -378,25 +421,42 @@ namespace UnboundGP.Race
         {
             var stats = ctx.CurrentMachineStats();
             int place = playerEntrant.place;
-            int points = place switch { 1 => 40, 2 => 28, 3 => 20, 4 => 14, _ => 10 };
+            // タイムアタックは完走概念がないため、1周以上でデータ収集報酬
+            int points = IsTimeAttack
+                ? (taLaps.Count > 0 ? 12 : 4)
+                : place switch { 1 => 40, 2 => 28, 3 => 20, 4 => 14, _ => 10 };
 
             ctx.Save.racesCompleted++;
             ctx.AddResearchPoints(points); // 内部で SaveGame される
 
-            // 最終順位行
-            var sorted = new List<Entrant>(entrants);
-            sorted.Sort((a, b) =>
+            string[] lines;
+            if (IsTimeAttack)
             {
-                if (a.finished != b.finished) return a.finished ? -1 : 1;
-                if (a.finished && b.finished) return a.place.CompareTo(b.place);
-                return b.raceDistance.CompareTo(a.raceDistance);
-            });
-            var lines = new string[sorted.Count];
-            for (int i = 0; i < sorted.Count; i++)
+                // ラップ履歴(全周)を結果行として渡す
+                lines = new string[taLaps.Count];
+                for (int i = 0; i < taLaps.Count; i++)
+                {
+                    string mark = Mathf.Approximately(taLaps[i], playerEntrant.bestLap) ? "  ★BEST" : "";
+                    lines[i] = $"LAP {i + 1} ── {LapTimeEstimator.Format(taLaps[i])}{mark}";
+                }
+            }
+            else
             {
-                var e = sorted[i];
-                string best = e.bestLap < float.MaxValue ? LapTimeEstimator.Format(e.bestLap) : "-:--.---";
-                lines[i] = $"{i + 1}. {e.name} ── BEST {best}";
+                // 最終順位行
+                var sorted = new List<Entrant>(entrants);
+                sorted.Sort((a, b) =>
+                {
+                    if (a.finished != b.finished) return a.finished ? -1 : 1;
+                    if (a.finished && b.finished) return a.place.CompareTo(b.place);
+                    return b.raceDistance.CompareTo(a.raceDistance);
+                });
+                lines = new string[sorted.Count];
+                for (int i = 0; i < sorted.Count; i++)
+                {
+                    var e = sorted[i];
+                    string best = e.bestLap < float.MaxValue ? LapTimeEstimator.Format(e.bestLap) : "-:--.---";
+                    lines[i] = $"{i + 1}. {e.name} ── BEST {best}";
+                }
             }
 
             var result = new RaceResult
