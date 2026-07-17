@@ -25,7 +25,8 @@ namespace UnboundGP.UI
 
         Image[] axisBars = new Image[WheelMapping.EditorAxisCount];
         Text[] axisLabels = new Text[WheelMapping.EditorAxisCount];
-        Text steerLabel, accelLabel, brakeLabel, statusText;
+        Text steerLabel, accelLabel, brakeLabel, statusText, sensLabel;
+        Image steerMonBar;
 
         Capture capturing = Capture.None;
         float captureTimer;
@@ -80,17 +81,42 @@ namespace UnboundGP.UI
             statusText = UiFactory.CreateText(bg, "", 18, TextAnchor.MiddleCenter, new Color(1f, 0.8f, 0.4f), true);
             UiFactory.SetAnchors((RectTransform)statusText.transform, new Vector2(0.53f, 0.74f), new Vector2(0.97f, 0.82f));
 
-            BuildAssignRow(bg, 0.6f, "ステアリング", () => steerLabel, l => steerLabel = l, Capture.Steer, "(左右いっぱいに回す)");
-            BuildAssignRow(bg, 0.46f, "アクセル", () => accelLabel, l => accelLabel = l, Capture.Accel, "(踏み切る)");
-            BuildAssignRow(bg, 0.32f, "ブレーキ", () => brakeLabel, l => brakeLabel = l, Capture.Brake, "(踏み切る)");
+            BuildAssignRow(bg, 0.63f, "ステアリング", () => steerLabel, l => steerLabel = l, Capture.Steer, "(左右いっぱいに回す)");
+            BuildAssignRow(bg, 0.52f, "アクセル", () => accelLabel, l => accelLabel = l, Capture.Accel, "(踏み切る)");
+            BuildAssignRow(bg, 0.41f, "ブレーキ", () => brakeLabel, l => brakeLabel = l, Capture.Brake, "(踏み切る)");
 
-            // ステア反転トグル
-            var invBtn = UiFactory.CreateButton(bg, "ステア左右反転", () =>
+            // ---- 切れ角感度(物理ホイールの回転量とゲーム内フルロックの整合) ----
+            var sensRow = UiFactory.CreatePanel(bg, new Color(0.1f, 0.12f, 0.18f, 0.95f), "Row_Sensitivity");
+            UiFactory.SetAnchors(sensRow, new Vector2(0.53f, 0.245f), new Vector2(0.97f, 0.355f));
+            sensLabel = UiFactory.CreateText(sensRow, "", 18, TextAnchor.MiddleLeft, Color.white);
+            sensLabel.supportRichText = true;
+            UiFactory.SetAnchors((RectTransform)sensLabel.transform, new Vector2(0f, 0.5f), new Vector2(1f, 1f), new Vector2(14f, 0f), new Vector2(-8f, 0f));
+            // プリセット: フルロック≈±90°になる感度 (総回転角/2)÷90
+            var b270 = UiFactory.CreateButton(sensRow, "270°ホイール", () => SetSensitivity(1.5f), new Color(0.25f, 0.45f, 0.35f), 15);
+            UiFactory.SetAnchors((RectTransform)b270.transform, new Vector2(0.02f, 0.06f), new Vector2(0.24f, 0.48f));
+            var b540 = UiFactory.CreateButton(sensRow, "540°", () => SetSensitivity(3.0f), new Color(0.25f, 0.4f, 0.45f), 15);
+            UiFactory.SetAnchors((RectTransform)b540.transform, new Vector2(0.26f, 0.06f), new Vector2(0.40f, 0.48f));
+            var b900 = UiFactory.CreateButton(sensRow, "900°", () => SetSensitivity(5.0f), new Color(0.3f, 0.35f, 0.5f), 15);
+            UiFactory.SetAnchors((RectTransform)b900.transform, new Vector2(0.42f, 0.06f), new Vector2(0.56f, 0.48f));
+            var bMinus = UiFactory.CreateButton(sensRow, "-", () => SetSensitivity(map.steerSensitivity - 0.1f), new Color(0.35f, 0.3f, 0.3f), 20);
+            UiFactory.SetAnchors((RectTransform)bMinus.transform, new Vector2(0.62f, 0.06f), new Vector2(0.72f, 0.48f));
+            var bPlus = UiFactory.CreateButton(sensRow, "+", () => SetSensitivity(map.steerSensitivity + 0.1f), new Color(0.3f, 0.35f, 0.3f), 20);
+            UiFactory.SetAnchors((RectTransform)bPlus.transform, new Vector2(0.74f, 0.06f), new Vector2(0.84f, 0.48f));
+            // ステア反転はこの行の右端へ
+            var invBtn = UiFactory.CreateButton(sensRow, "左右反転", () =>
             {
                 map.steerInvert = !map.steerInvert;
                 RefreshLabels();
-            }, new Color(0.3f, 0.35f, 0.5f), 18);
-            UiFactory.SetAnchors((RectTransform)invBtn.transform, new Vector2(0.53f, 0.20f), new Vector2(0.73f, 0.27f));
+            }, new Color(0.3f, 0.35f, 0.5f), 15);
+            UiFactory.SetAnchors((RectTransform)invBtn.transform, new Vector2(0.86f, 0.06f), new Vector2(0.99f, 0.48f));
+
+            // ---- ゲーム内ステアの実測バー(回した結果がどう入るかを即確認) ----
+            var steerMonRow = UiFactory.CreatePanel(bg, new Color(0f, 0f, 0f, 0.35f), "SteerMonitor");
+            UiFactory.SetAnchors(steerMonRow, new Vector2(0.53f, 0.165f), new Vector2(0.97f, 0.225f));
+            var monLabel = UiFactory.CreateText(steerMonRow, "ゲーム内ステア", 15, TextAnchor.MiddleLeft, new Color(0.8f, 0.85f, 0.95f));
+            UiFactory.SetAnchors((RectTransform)monLabel.transform, new Vector2(0f, 0f), new Vector2(0.28f, 1f), new Vector2(14f, 0f), Vector2.zero);
+            steerMonBar = UiFactory.CreateBar(steerMonRow, new Color(1f, 0.82f, 0.3f), "SteerBar");
+            UiFactory.SetAnchors((RectTransform)steerMonBar.transform.parent, new Vector2(0.29f, 0.2f), new Vector2(0.98f, 0.8f));
 
             // 保存して閉じる / キーボードのみ
             var saveBtn = UiFactory.CreateButton(bg, "保存して閉じる", Close, new Color(0.2f, 0.55f, 0.35f), 22);
@@ -143,6 +169,16 @@ namespace UnboundGP.UI
                 float raw = WheelMapping.ReadRawAxis(i + 1);
                 if (axisBars[i] != null) axisBars[i].fillAmount = (raw + 1f) * 0.5f;
                 if (axisLabels[i] != null) axisLabels[i].text = $"軸{i + 1}\n{raw:+0.00;-0.00}";
+            }
+
+            // ゲーム内ステアの実測(感度・反転・デッドゾーン適用後の最終値)
+            if (steerMonBar != null)
+            {
+                float s = map.ReadSteer();
+                steerMonBar.fillAmount = (s + 1f) * 0.5f;
+                steerMonBar.color = Mathf.Abs(s) >= 0.999f
+                    ? new Color(0.95f, 0.3f, 0.2f)   // フルロック到達
+                    : new Color(1f, 0.82f, 0.3f);
             }
 
             if (capturing != Capture.None)
@@ -204,11 +240,21 @@ namespace UnboundGP.UI
             RefreshLabels();
         }
 
+        /// <summary>切れ角感度を設定し、表示を更新する。</summary>
+        void SetSensitivity(float v)
+        {
+            map.steerSensitivity = Mathf.Clamp(Mathf.Round(v * 10f) / 10f, 0.5f, 6f);
+            RefreshLabels();
+        }
+
         void RefreshLabels()
         {
             if (steerLabel != null) steerLabel.text = $"ステアリング: {AxisDesc(map.steerAxis)}{(map.steerInvert ? "  [反転]" : "")}";
             if (accelLabel != null) accelLabel.text = $"アクセル: {AxisDesc(map.accelAxis)}";
             if (brakeLabel != null) brakeLabel.text = $"ブレーキ: {AxisDesc(map.brakeAxis)}";
+            if (sensLabel != null)
+                sensLabel.text = $"切れ角感度: <b>x{map.steerSensitivity:0.0}</b>" +
+                    $"  <color=#aaaaaa>(フルロックに必要な回転 ≈ 物理フルロックの {100f / map.steerSensitivity:0}%)</color>";
         }
 
         static string AxisDesc(int axis) => axis <= 0 ? "<color=#888888>未割り当て</color>" : $"<color=#7be07b>軸{axis}</color>";

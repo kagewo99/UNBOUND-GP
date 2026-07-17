@@ -28,7 +28,7 @@ namespace UnboundGP.Race
         public const float CogToFront = 1.85f;   // lf (前寄りに置くと後輪荷重が増える=トラクション寄り)
         public const float CogToRear = 1.55f;    // lr
         public const float CogHeight = 0.32f;    // h 重心高(やや高めで加減速の荷重移動を体感寄りに)
-        public const float MaxSteerDeg = 26f;
+        public const float MaxSteerDeg = 28f;
         public const float TireB = 20f;          // タイヤカーブの初期勾配(高いほど小さな滑りで食う=ダルつかない)
         public const float TireC = 1.20f;        // 形状(1付近で限界が穏やか=スナップしにくく御しやすい)
         const float G = 9.81f;
@@ -53,6 +53,8 @@ namespace UnboundGP.Race
             public float lateralAccel;   // 横加速度(符号付き, 左が正)[m/s^2] 一人称の頭振り用
             public float slipAngleRad;   // 車体スリップ角(挙動の乱れ表示用)
             public float rearGripUsage;  // リアの縦グリップ使用率 0..1(オーバーステア予兆)
+            public float frontLoadN;     // 前アクスル垂直荷重 [N](荷重移動込み。テレメトリ表示用)
+            public float rearLoadN;      // 後アクスル垂直荷重 [N]
         }
 
         /// <summary>状態を初期化する(リセット時)。</summary>
@@ -207,6 +209,8 @@ namespace UnboundGP.Race
                 lateralAccel = lateralAccel,
                 slipAngleRad = Mathf.Atan2(v, uEff),
                 rearGripUsage = rearUse,
+                frontLoadN = Nf,
+                rearLoadN = Nr,
             };
         }
 

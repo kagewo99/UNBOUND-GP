@@ -41,6 +41,10 @@ namespace UnboundGP.Race
         public float SteerInput { get; private set; }
         /// <summary>リアの縦グリップ使用率 0..1。タイヤスモーク/スキール音のトリガに使う。</summary>
         public float RearGripUsage { get; private set; }
+        /// <summary>前アクスル荷重 [kgf](荷重移動込み。F3テレメトリ表示用)。</summary>
+        public float FrontLoadKg { get; private set; }
+        /// <summary>後アクスル荷重 [kgf]。</summary>
+        public float RearLoadKg { get; private set; }
 
         // 衝突などの瞬間的なGがゲームを壊さないよう、報告するGの上限。
         const float MaxReportG = 50f;
@@ -155,6 +159,8 @@ namespace UnboundGP.Race
 
                 SlipAngleDeg = outp.slipAngleRad * Mathf.Rad2Deg;
                 RearGripUsage = outp.rearGripUsage;
+                FrontLoadKg = outp.frontLoadN / 9.81f;
+                RearLoadKg = outp.rearLoadN / 9.81f;
             }
 
             Condition?.ReportG(CurrentG, dt);

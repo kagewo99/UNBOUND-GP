@@ -81,11 +81,11 @@ namespace UnboundGP.Race
 
             hud = RaceHUD.Create();
             hud.SetMode($"{modeData.title} ── {ctx.Track.trackName}");
-            string driveHint = "W/↑:アクセル S/↓:ブレーキ A/D:操舵  E:シフトUP Q:シフトDOWN(低速でN→R) T:AT/MT  R:コース復帰 F1:ハンドル設定";
+            string driveHint = "W/↑:アクセル S/↓:ブレーキ A/D:操舵  E/Q:シフト(低速でN→R) T:AT/MT  R:復帰 F1:ハンドル設定 F3:物理数値";
             if (IsTimeAttack) driveHint += "  Esc:走行終了";
             hud.SetHint(modeData.playerDrives
                 ? driveHint
-                : "観戦モード   Tab: カメラ切替   ※あなたのマシンはAIが運転しています");
+                : "観戦モード   Tab:カメラ切替 F3:物理数値   ※あなたのマシンはAIが運転しています");
 
             // カメラセットアップ:自分で運転するモードは一人称(人体のGを自分の目で受ける)、
             // Machine GP は三人称(人間不在のレースを外から眺める)。視点の対比でテーマを語る。
@@ -353,6 +353,10 @@ namespace UnboundGP.Race
             var watch = entrants[Mathf.Clamp(watchIndex, 0, entrants.Count - 1)];
             bool humanMode = ctx.SelectedMode != GameMode.MachineGP;
 
+            // ---- F3: 物理テレメトリの表示/更新 ----
+            if (Input.GetKeyDown(KeyCode.F3)) hud.TogglePhysics();
+            if (hud.PhysicsVisible) hud.SetPhysics(BuildPhysicsReadout(watch.car));
+
             hud.SetTelemetry(
                 watch.car.CurrentSpeedKmh,
                 watch.condition != null ? watch.condition.CurrentG : watch.car.CurrentG,
@@ -402,6 +406,33 @@ namespace UnboundGP.Race
                 sb.AppendLine($"{i + 1}. {e.name}   BEST {best}{(e.finished ? "  [FIN]" : "")}");
             }
             hud.SetStandings(sb.ToString());
+        }
+
+        /// <summary>
+        /// F3 で表示する物理テレメトリ。設計画面の数値がコース上で実際にどう働いているかを
+        /// リアルタイムに可視化する(ダウンフォース・グリップ限界・荷重移動・実測G)。
+        /// </summary>
+        string BuildPhysicsReadout(CarController car)
+        {
+            var st = car.Stats;
+            float v = car.CurrentSpeedMs;
+            float r = v / MachineStats.ReferenceSpeedMs;
+            float dfG = st.downforceFactor * r * r;              // 現在速度のダウンフォース[G]
+            float dfKgf = st.weightKg * dfG;                     // ≒ 車体を押し付ける力[kgf]
+            float gripG = st.MaxCorneringG(v);                   // 旋回限界[G]
+
+            var sb = new System.Text.StringBuilder();
+            sb.AppendLine("<b>━ PHYSICS TELEMETRY (F3で閉じる) ━</b>");
+            sb.AppendLine($"速度 <b>{car.CurrentSpeedKmh:0}</b> km/h   実効最高速 {st.EffectiveTopSpeedKmh:0} km/h");
+            sb.AppendLine($"ダウンフォース <b>{dfG:0.00} G</b> ≒ {dfKgf:0} kgf");
+            sb.AppendLine($"  内訳: 機械グリップ {st.mechanicalGrip:0.00}G + 速度依存 {dfG:0.00}G");
+            sb.AppendLine($"旋回限界 <b>{gripG:0.00} G</b> @現在速度");
+            sb.AppendLine($"実測G  総合 {car.CurrentG:0.0} / 横 {car.LateralGSigned:+0.0;-0.0} / 縦 {car.LongitudinalGSigned:+0.0;-0.0}");
+            sb.AppendLine($"スリップ角 {car.SlipAngleDeg:0.0}°   リア駆動使用率 {car.RearGripUsage * 100f:0}%");
+            sb.AppendLine($"アクスル荷重  前 {car.FrontLoadKg:0} / 後 {car.RearLoadKg:0} kgf (車重 {st.weightKg:0} kg)");
+            sb.AppendLine($"空気抵抗 {st.drag:0.00}   信頼性 {st.reliability * 100f:0}%");
+            sb.AppendLine($"ステア入力 {car.SteerInput:+0.00;-0.00}   ギア {car.Gearbox.GearLabel} / {car.Gearbox.Rpm:0} rpm");
+            return sb.ToString();
         }
 
         void UpdateSpectator()

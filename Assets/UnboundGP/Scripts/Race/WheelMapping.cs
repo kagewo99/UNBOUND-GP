@@ -26,6 +26,15 @@ namespace UnboundGP.Race
         public float steerDeadzone = 0.06f;
         public float steerRange = 1.0f;     // ステア軸の最大振れ(正規化用)
 
+        /// <summary>
+        /// 切れ角感度。物理ホイールの回転の一部だけでゲーム内フルロックに達するよう増幅する。
+        /// キャリブレーションは「物理フルロック=軸の最大」を記録するため、1.0のままだと
+        /// 270°ホイールでも端まで回さないと切れず“曲がらない”と感じる。
+        /// 目安: フルロックを±90°にしたい場合 → 感度 = (ホイール総回転角/2) / 90
+        ///   270°ホイール(HORI APEX等)=1.5 / 540°=3.0 / 900°=5.0
+        /// </summary>
+        public float steerSensitivity = 1.5f;
+
         // ペダルの素値の校正(離した状態 rest → 踏み切った状態 full)
         public float accelRest = -1f, accelFull = 1f;
         public float brakeRest = -1f, brakeFull = 1f;
@@ -71,7 +80,9 @@ namespace UnboundGP.Race
             // デッドゾーン後に再スケール(中央付近の遊びを除去)
             float dz = steerDeadzone;
             if (Mathf.Abs(v) < dz) return 0f;
-            return Mathf.Sign(v) * (Mathf.Abs(v) - dz) / (1f - dz);
+            v = Mathf.Sign(v) * (Mathf.Abs(v) - dz) / (1f - dz);
+            // 切れ角感度: 物理回転の一部でフルロックへ(超過分はクランプ)
+            return Mathf.Clamp(v * Mathf.Max(steerSensitivity, 0.1f), -1f, 1f);
         }
 
         /// <summary>アクセル 0〜1。未割り当てなら 0。</summary>

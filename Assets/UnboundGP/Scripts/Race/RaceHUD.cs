@@ -17,6 +17,8 @@ namespace UnboundGP.Race
         Text modeText, lapText, timeText, speedText, gText, humanRatioText;
         Text countdownText, standingsText, hintText, blackoutText;
         Text gearText, rpmText, shiftModeText;
+        Text physicsText;
+        RectTransform physicsPanel;
         Image gBar, consciousnessBar, vignette, rpmBar;
 
         public static RaceHUD Create()
@@ -108,6 +110,18 @@ namespace UnboundGP.Race
             rpmBar = UiFactory.CreateBar(gearRt, new Color(0.3f, 0.85f, 0.4f), "RpmBar");
             UiFactory.SetAnchors((RectTransform)rpmBar.transform.parent, new Vector2(0f, 0.04f), new Vector2(1f, 0.14f), new Vector2(10f, 0f), new Vector2(-10f, 0f));
 
+            // ---- 左下: 物理テレメトリ(F3でトグル) ----
+            physicsPanel = UiFactory.CreatePanel(root, new Color(0f, 0f, 0f, 0.7f), "PhysicsPanel");
+            UiFactory.SetAnchors(physicsPanel, new Vector2(0f, 0f), new Vector2(0f, 0f));
+            physicsPanel.pivot = new Vector2(0f, 0f);
+            physicsPanel.anchoredPosition = new Vector2(16f, 56f);
+            physicsPanel.sizeDelta = new Vector2(460f, 330f);
+            physicsText = UiFactory.CreateText(physicsPanel, "", 17, TextAnchor.UpperLeft, Color.white);
+            physicsText.supportRichText = true;
+            physicsText.lineSpacing = 1.15f;
+            UiFactory.SetAnchors((RectTransform)physicsText.transform, Vector2.zero, Vector2.one, new Vector2(14f, 10f), new Vector2(-14f, -10f));
+            physicsPanel.gameObject.SetActive(false);
+
             // ---- 中央: カウントダウン / BLACKOUT ----
             countdownText = UiFactory.CreateText(root, "", 110, TextAnchor.MiddleCenter, Color.white, true);
             UiFactory.SetAnchors((RectTransform)countdownText.transform, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f));
@@ -128,6 +142,11 @@ namespace UnboundGP.Race
 
         public void SetMode(string title) => modeText.text = title;
         public void SetHint(string hint) => hintText.text = hint;
+
+        /// <summary>物理テレメトリパネルの表示/非表示(F3)。</summary>
+        public bool PhysicsVisible => physicsPanel != null && physicsPanel.gameObject.activeSelf;
+        public void TogglePhysics() => physicsPanel.gameObject.SetActive(!physicsPanel.gameObject.activeSelf);
+        public void SetPhysics(string s) => physicsText.text = s;
         public void SetCountdown(string s) => countdownText.text = s;
         public void SetStandings(string s) => standingsText.text = s;
 
