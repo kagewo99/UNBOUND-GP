@@ -28,10 +28,17 @@ namespace UnboundGP.Race
         public const float CogToFront = 1.85f;   // lf (前寄りに置くと後輪荷重が増える=トラクション寄り)
         public const float CogToRear = 1.55f;    // lr
         public const float CogHeight = 0.32f;    // h 重心高(やや高めで加減速の荷重移動を体感寄りに)
-        public const float MaxSteerDeg = 28f;
+        public const float MaxSteerDeg = 32f;
         public const float TireB = 20f;          // タイヤカーブの初期勾配(高いほど小さな滑りで食う=ダルつかない)
         public const float TireC = 1.20f;        // 形状(1付近で限界が穏やか=スナップしにくく御しやすい)
         const float G = 9.81f;
+
+        /// <summary>
+        /// 前輪グリップ倍率。重心がリア寄り(前輪荷重46%)で前輪の絶対グリップが低く、
+        /// 高速コーナーで前が逃げてアンダー=「曲がらない」原因になっていた。前輪を増強して
+        /// ターンイン応答を上げる(ワイドな前タイヤ相当)。横滑り減衰でリアは planted のまま。
+        /// </summary>
+        public const float FrontGripBias = 1.3f;
 
         // アーケード安定化:破綻を防ぐ2種の減衰。効かせる速度域を分けているのが要点。
         // ・横滑り(スライド)減衰は中速から効かせて“氷っぽさ”を消し地面に吸い付かせる
@@ -100,7 +107,7 @@ namespace UnboundGP.Race
             float Nf = Mathf.Max(staticNf - transfer, 0.05f * m * G);
             float Nr = Mathf.Max(staticNr + transfer, 0.05f * m * G);
 
-            float FyfMax = mu * Nf;
+            float FyfMax = mu * Nf * FrontGripBias;   // 前輪増強でターンインを確保
             float FyrMax = mu * Nr;
 
             // ---- タイヤ横力(スリップに抗する向き・飽和カーブ) ----
