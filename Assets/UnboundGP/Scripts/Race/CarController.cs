@@ -53,6 +53,8 @@ namespace UnboundGP.Race
         IDriverInput input;
         bool grounded;
         Vector3 prevVelocity;
+        float lastGroundedTime = -99f;   // 接地のコヨーテタイム用
+        float smoothedSteer;             // ステアのジッタ抑制(特にホイールの生軸)
 
         public void Setup(MachineStats stats, IDriverInput driverInput, DriverCondition condition, bool hasCVT = false)
         {
@@ -77,7 +79,12 @@ namespace UnboundGP.Race
             if (rb == null || input == null) return;
             float dt = Time.fixedDeltaTime;
 
-            grounded = Physics.Raycast(transform.position + Vector3.up * 0.5f, Vector3.down, 1.2f);
+            // 接地判定を堅牢化:box内部(+0.5)から長め(3m)に撃ち、実寸メッシュの起伏でも
+            // 確実に路面を捉える。さらにコヨーテタイム(0.25秒)で瞬間的なドロップアウトを吸収。
+            // ここが外れるとモデルが止まってグリップ0=氷になり、リアの回転も止まらなくなる。
+            if (Physics.Raycast(transform.position + Vector3.up * 0.5f, Vector3.down, 3.0f))
+                lastGroundedTime = Time.time;
+            grounded = (Time.time - lastGroundedTime) < 0.25f;
 
             // ---- Rigidbody → モデル状態へ取り込み(衝突結果を反映) ----
             // 平面の前方・右方向(車体の傾きを無視して水平面で扱う)
@@ -131,6 +138,10 @@ namespace UnboundGP.Race
 
             // 後退中はステアの向きが逆に感じるため反転(前向き視点でも直感に合わせる)
             if (u < -0.3f || Gearbox.Gear == Transmission.ReverseGear) steer = -steer;
+            // ステアのジッタ抑制:ホイールの生軸ノイズが増幅されて中速でリアを揺さぶるのを防ぐ。
+            // 30/s の速い追従なので操作の遅れはほぼ無く、高周波のブレだけを均す。
+            smoothedSteer = Mathf.Lerp(smoothedSteer, steer, 1f - Mathf.Exp(-30f * dt));
+            steer = smoothedSteer;
             SteerInput = steer;   // 見た目の前輪切れ角用
 
             // ギアの駆動方向に応じて符号付きスロットルを作る(R=後退, N=駆動なし, 前進=前へ)

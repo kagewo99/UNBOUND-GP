@@ -33,10 +33,11 @@ namespace UnboundGP.Race
         public const float TireC = 1.20f;        // 形状(1付近で限界が穏やか=スナップしにくく御しやすい)
         const float G = 9.81f;
 
-        // アーケード安定化:キーボードでも破綻しないよう、横滑りとヨーの暴れを減衰させる。
-        // ただし高速域でのみ効かせ(VehicleModel側で速度重み付け)、低中速の素直な回頭は殺さない。
-        public const float GripAssist = 2.5f;    // 横速度の追加減衰 [1/s](高速時)
-        public const float YawDamp = 1.5f;       // ヨーレートの追加減衰 [1/s](高速時)
+        // アーケード安定化:破綻を防ぐ2種の減衰。効かせる速度域を分けているのが要点。
+        // ・横滑り(スライド)減衰は中速から効かせて“氷っぽさ”を消し地面に吸い付かせる
+        // ・ヨー(回頭)減衰は高速のみ=低中速の「曲がり」を殺さない
+        public const float GripAssist = 3.5f;    // 横速度の追加減衰 [1/s]
+        public const float YawDamp = 1.5f;       // ヨーレートの追加減衰 [1/s](高速のみ)
 
         // ---- 状態(内部標準座標系) ----
         public float forwardSpeed;   // u  [m/s] 前方
@@ -136,8 +137,10 @@ namespace UnboundGP.Race
             FxRear = Mathf.Clamp(FxRear, -FyrMax, FyrMax);
 
             // ---- フリクションサークル:縦に使った分だけ横グリップが減る ----
+            // リアは 0.8 係数でやや甘くし、フルスロットルでも横グリップを残す=パワーオンで
+            // 即スピンしにくくする(アクセルで曲げる挙動は残しつつ、破綻を防ぐ)。
             float rearUse = Mathf.Clamp01(Mathf.Abs(FxRear) / Mathf.Max(FyrMax, 1f));
-            float rearLat = FyrMax * Mathf.Sqrt(Mathf.Max(0f, 1f - rearUse * rearUse));
+            float rearLat = FyrMax * Mathf.Sqrt(Mathf.Max(0f, 1f - rearUse * rearUse * 0.8f));
             Fyr = Mathf.Clamp(Fyr, -rearLat, rearLat);
 
             float frontUse = Mathf.Clamp01(Mathf.Abs(FxFront) / Mathf.Max(FyfMax, 1f));
@@ -177,14 +180,13 @@ namespace UnboundGP.Race
                 v = Mathf.Lerp(v, 0f, kinWeight * 0.8f);
             }
 
-            // ---- 安定化は高速ほど強める ----
-            // 低中速は素直に曲げ(アンダーを出さない)、高速はどっしり安定させる(暴れ防止)。
-            float stabWeight = Mathf.Clamp01((spd - 18f) / 50f);     // 18m/s以上で徐々に
-            if (stabWeight > 0f)
-            {
-                v *= Mathf.Max(0f, 1f - GripAssist * stabWeight * dt);
-                r *= Mathf.Max(0f, 1f - YawDamp * stabWeight * dt);
-            }
+            // ---- 安定化(2種を別々の速度域で)----
+            // 横滑り減衰: 中速(6→18m/s)から効かせ、地面に吸い付かせる(氷っぽさ・リアの流れを抑制)。
+            // ヨー減衰: 高速のみ。低中速の回頭(=曲がり)は殺さない。
+            float slideWeight = Mathf.Clamp01((spd - 6f) / 12f);
+            float yawWeight = Mathf.Clamp01((spd - 20f) / 40f);
+            v *= Mathf.Max(0f, 1f - GripAssist * slideWeight * dt);
+            if (yawWeight > 0f) r *= Mathf.Max(0f, 1f - YawDamp * yawWeight * dt);
 
             // ---- 停止保持 ----
             // 駆動入力がほぼ無く、ほぼ止まっているなら 0 へ“穏やかに”寄せる(静止摩擦)。
